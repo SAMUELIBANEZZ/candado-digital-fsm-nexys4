@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+.venv/
+
+# Salidas de simulación y compilación
+build/
+*.vcd
+*.ghw
+work-obj*.cf
+
+# Vivado
+vivado/proj/
+vivado/reports/
+*.jou
+*.log
+*.str
+.Xil/
+*.bit
+*.dcp
+
+# Editores / sistema
+.DS_Store
+.idea/
+.vscode/

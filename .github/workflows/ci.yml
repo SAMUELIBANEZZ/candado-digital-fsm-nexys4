@@ -1,0 +1,33 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  verificacion:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Dependencias
+        run: |
+          pip install -r requirements.txt
+          sudo apt-get update
+          sudo apt-get install -y ghdl
+
+      - name: Pruebas Python (pytest + MyHDL)
+        run: make test
+
+      - name: Regenerar VHDL, XDC y vectores
+        run: make hdl xdc vectors
+
+      - name: El VHDL, el XDC y los vectores versionados están al día
+        run: git diff --exit-code -- hdl constraints sim
+
+      - name: Simulación del VHDL convertido (GHDL) contra el modelo Python
+        run: make ghdl
