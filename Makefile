@@ -9,12 +9,13 @@
 #   make vcd        como ghdl, pero escribe build/candado.vcd (GTKWave / vc.drom.io)
 #   make pyvcd      VCD de la simulación Python de un escenario (SCEN=tc04_...)
 #   make mutation   prueba de mutación (rompe el diseño y comprueba que las pruebas fallan)
+#   make figures    regenera las figuras del informe (requiere matplotlib)
 #   make clean
 
 PY ?= python3
 SCEN ?= tc04_cinco_incorrectas_consecutivas
 
-.PHONY: all test hdl xdc vectors ghdl vcd pyvcd mutation clean
+.PHONY: all test hdl xdc vectors ghdl vcd pyvcd mutation figures clean
 
 all: hdl xdc vectors test ghdl
 
@@ -42,6 +43,9 @@ pyvcd:
 
 mutation:
 	$(PY) tools/mutation_check.py
+
+figures:
+	$(PY) tools/generate_figures.py
 
 clean:
 	rm -rf build vivado/proj vivado/reports .pytest_cache

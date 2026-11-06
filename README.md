@@ -132,6 +132,7 @@ make test       # sólo pruebas Python
 make mutation   # prueba de mutación (el probador debe detectar 20/20 fallos inyectados)
 make vcd        # build/candado.vcd para GTKWave o https://vc.drom.io
 make pyvcd SCEN=tc10_unlocked_vence   # VCD de la simulación Python de un escenario
+make figures    # regenera docs/img/fig_fsm.png y fig_bloques.png (requiere matplotlib)
 ```
 
 ## Poner el diseño en la placa
@@ -159,7 +160,7 @@ hdl/              VHDL generado (candado_top.vhd = hardware, candado_top_sim.vhd
 sim/              testbench VHDL autoverificable + vectores generados desde Python
 constraints/      candado_nexys4ddr.xdc (asignación de pines)
 vivado/           scripts Tcl
-docs/             informe APA 7
+docs/             informe APA 7 y figuras (docs/img, generadas con tools/generate_figures.py)
 ```
 
 **No edite `hdl/` a mano:** se regenera con `make hdl`; el CI falla si el VHDL versionado no coincide con el Python.
