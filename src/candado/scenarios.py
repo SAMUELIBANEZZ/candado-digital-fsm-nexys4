@@ -1,8 +1,9 @@
 """Escenarios de verificación.
 
 ``TC01..TC10`` reproducen los 10 casos de la Tabla III del anteproyecto.
-``EX01..EX08`` cubren los huecos de especificación cerrados durante el diseño
-(borrado de dígitos, modo configuración, reset duro, pulsaciones simultáneas...).
+``EX01..EX11`` cubren los huecos de especificación cerrados durante el diseño
+(borrado de dígitos, modo configuración, reset duro, pulsaciones simultáneas,
+cierre manual, BTNR no borra los intentos...).
 
 Cada escenario devuelve un :class:`~candado.testing.Stimulus` con *marcas*
 (``mark``) que las pruebas consultan para comprobar el estado en puntos
@@ -14,17 +15,18 @@ from .testing import Stimulus
 
 CODE = 0x1234          # código de fábrica
 WRONG = 0x1111         # secuencia incorrecta (difiere del código)
+WRONGS = (0x1111, 0x2222, 0x3333, 0x4444, 0x5555)   # 5 fallos -> ALARM
 
 
 def _wait_error_end(s: Stimulus):
-    """Espera a que termine el estado ERROR (vuelve a INPUT o pasa a ALARM)."""
+    """Espera a que termine el estado ERROR (vuelve a LOCKED o pasa a ALARM)."""
     s.settle(4)
     s.wait_ticks(s.p.error_ticks + 1)
 
 
 def _to_alarm(s: Stimulus):
-    """Tres intentos fallidos consecutivos; termina ya dentro de ALARM."""
-    for value in (0x1111, 0x2222, 0x3333):
+    """MAX_ATTEMPTS intentos fallidos consecutivos; termina ya dentro de ALARM."""
+    for value in WRONGS[:s.p.max_attempts]:
         s.code(value)
         _wait_error_end(s)
 
@@ -48,7 +50,7 @@ def tc01_reset_en_cualquier_estado(p=SIM):
     s.mark("a_antes")
     s.press("BTNR")
     s.settle(6)
-    s.mark("a_despues")
+    s.mark("a_despues")              # LOCKED, sin dígitos; el fallo se conserva
     # (b) UNLOCKED
     s.code(CODE)
     s.settle(4)
@@ -63,18 +65,20 @@ def tc01_reset_en_cualquier_estado(p=SIM):
     s.press("BTNR")
     s.settle(6)
     s.mark("c_despues")
-    # (d) ALARM
-    s.press("BTNR")
+    # (d) ALARM: BTNR no la cancela; CPU_RESET sí
+    s.reset_hard()                   # parte de 0 fallos
     _to_alarm(s)
     s.mark("d_antes")
     s.press("BTNR")
     s.settle(6)
+    s.mark("d_btnr")
+    s.reset_hard()
     s.mark("d_despues")
     # (e) CONFIG
     s.code(CODE)
     s.settle(4)
-    s.digit(7, mode=True)
-    s.set_sw(0)
+    s.press("BTNU")
+    s.digit(7)
     s.mark("e_antes")
     s.press("BTNR")
     s.settle(6)
@@ -112,22 +116,14 @@ def tc03_incorrecta_bajo_el_maximo(p=SIM):
     return s
 
 
-def tc04_tres_incorrectas_consecutivas(p=SIM):
+def tc04_cinco_incorrectas_consecutivas(p=SIM):
     s = _start(p)
-    s.code(0x1111)
-    s.settle(2)
-    s.mark("e1")
-    _wait_error_end(s)
-    s.mark("i1")
-    s.code(0x2222)
-    s.settle(2)
-    s.mark("e2")
-    _wait_error_end(s)
-    s.mark("i2")
-    s.code(0x3333)
-    s.settle(2)
-    s.mark("e3")
-    _wait_error_end(s)
+    for i, value in enumerate(WRONGS[:p.max_attempts]):
+        s.code(value)
+        s.settle(2)
+        s.mark(f"e{i + 1}")
+        _wait_error_end(s)
+        s.mark(f"l{i + 1}")
     s.mark("alarma")
     return s
 
@@ -138,26 +134,25 @@ def tc05_alarma_ignora_entradas(p=SIM):
     s.mark("inicio_alarma")
     s.code(CODE)                 # incluso el código correcto se ignora
     s.press("BTNL")
+    s.press("BTNR")              # BTNR tampoco la cancela
     s.press("BTNU")
     s.press("BTND")
-    s.digit(5, mode=True)
     s.mark("fin_entradas")
     return s
 
 
 def tc06_alarma_reset_o_timeout(p=SIM):
     s = _start(p)
-    # (a) salida por reset
+    # (a) salida por reset duro (CPU_RESET)
     _to_alarm(s)
     s.mark("a_alarma")
-    s.press("BTNR")
-    s.settle(6)
-    s.mark("a_idle")
+    s.reset_hard()
+    s.mark("a_locked")
     # (b) salida por vencimiento del temporizador
     _to_alarm(s)
     s.mark("b_alarma")
     s.wait_ticks(p.alarm_ticks + 1)
-    s.mark("b_idle")
+    s.mark("b_locked")
     # tras salir, el contador de intentos quedó en cero: el código vale
     s.code(CODE)
     s.settle(4)
@@ -200,8 +195,6 @@ def tc09_error_en_cada_posicion(p=SIM):
         s.settle(2)
         s.mark(f"error_pos{pos}")
         _wait_error_end(s)
-        s.press("BTNR")                         # reinicia intentos entre casos
-        s.settle(6)
     return s
 
 
@@ -235,39 +228,38 @@ def ex01_borrar_digitos(p=SIM):
     s.digit(8)
     s.mark("uno")
     s.press("BTNL")
-    s.mark("vuelve_idle")          # borrar el único dígito -> IDLE
+    s.mark("vuelve_locked")        # borrar el único dígito -> LOCKED
     s.press("BTNL")
-    s.mark("borrar_en_idle")       # sin efecto
+    s.mark("borrar_en_locked")     # sin efecto
     return s
 
 
 def ex02_configurar_codigo(p=SIM):
     new = 0xA5C3
     s = _start(p)
-    # SW15=1 en IDLE no abre CONFIG: es una entrada normal
-    s.digit(0, mode=True)
-    s.mark("sw15_en_idle")
-    s.press("BTNR")
-    s.settle(6)
+    # BTNU con el candado cerrado no abre CONFIG
+    s.press("BTNU")
+    s.mark("btnu_en_locked")
     # desbloquear y entrar a CONFIG
     s.code(CODE)
     s.settle(4)
-    s.digit(7)                      # SW15=0: BTNC en UNLOCKED se ignora
-    s.mark("unlocked_sin_sw15")
-    s.digit(new >> 12, mode=True)
-    s.mark("config_abierto")
+    s.digit(7)                      # BTNC en UNLOCKED se ignora
+    s.mark("unlocked_btnc")
+    s.press("BTNU")
+    s.mark("config_abierto")        # CONFIG sin dígitos
+    s.digit(new >> 12)
+    s.mark("config_uno")
     for shift in (8, 4, 0):
         s.digit((new >> shift) & 0xF)
     s.settle(4)
     s.mark("config_guardado")
-    s.press("BTNR")
+    s.press("BTND")                 # cerrar
     s.settle(6)
+    s.mark("cerrado")
     # el código anterior ya no sirve
     s.code(CODE)
     _wait_error_end(s)
     s.mark("viejo_falla")
-    s.press("BTNR")
-    s.settle(6)
     # el nuevo sí
     s.code(new)
     s.settle(4)
@@ -279,8 +271,8 @@ def ex03_config_vence_sin_guardar(p=SIM):
     s = _start(p)
     s.code(CODE)
     s.settle(4)
-    s.digit(0xF, mode=True)
-    s.set_sw(0)
+    s.press("BTNU")
+    s.digit(0xF)
     s.digit(0xE)
     s.mark("en_config")
     s.wait_ticks(p.config_ticks + 1)
@@ -296,12 +288,11 @@ def ex04_reset_duro_restaura_codigo(p=SIM):
     s = _start(p)
     s.code(CODE)
     s.settle(4)
-    s.digit(new >> 12, mode=True)
-    for shift in (8, 4, 0):
-        s.digit((new >> shift) & 0xF)
+    s.press("BTNU")
+    s.code(new)
     s.settle(4)
     s.mark("cambiado")
-    s.press("BTNR")                 # reset de usuario: conserva el nuevo código
+    s.press("BTNR")                 # BTNR: conserva el nuevo código
     s.settle(6)
     s.mark("tras_btnr")
     s.reset_hard()                  # reset duro: vuelve al código de fábrica
@@ -322,7 +313,7 @@ def ex05_pulsaciones_simultaneas(p=SIM):
     s.press_together(["BTNC", "BTNL"])
     s.mark("delete_gana")           # count == 1
     s.press_together(["BTNC", "BTNR"])
-    s.mark("reset_gana")            # IDLE
+    s.mark("reset_gana")            # LOCKED
     return s
 
 
@@ -343,15 +334,15 @@ def ex07_entradas_en_error_se_ignoran(p=SIM):
     s.digit(5)                      # durante ERROR: debe ignorarse
     s.mark("durante_error")
     _wait_error_end(s)
-    s.mark("vuelve_input")          # INPUT con 0 dígitos
+    s.mark("vuelve_locked")         # LOCKED con 0 dígitos
     return s
 
 
-def ex08_botones_no_usados(p=SIM):
+def ex08_botones_sin_funcion(p=SIM):
     s = _start(p)
     s.press("BTNU")
     s.press("BTND")
-    s.mark("idle_sin_efecto")
+    s.mark("locked_sin_efecto")
     s.digit(1)
     s.press("BTNU")
     s.press("BTND")
@@ -365,19 +356,45 @@ def ex09_secuencia_completa_uart(p=SIM):
     s.wait(100)
     s.digit(1)
     s.wait(300)
-    s.press("BTNL")                 # INPUT -> IDLE
+    s.press("BTNL")                 # INPUT -> LOCKED
     s.wait(300)
     s.code(WRONG)
-    _wait_error_end(s)
-    s.wait(300)
-    s.press("BTNR")
+    _wait_error_end(s)              # ERROR -> LOCKED
     s.wait(300)
     s.code(CODE)
     s.wait(100)
-    s.digit(9, mode=True)           # UNLOCKED -> CONFIG
+    s.press("BTNU")                 # UNLOCKED -> CONFIG
     s.wait(300)
     s.press("BTNR")
     s.wait(700)                     # deja terminar la última línea UART
+    return s
+
+
+def ex10_cierre_manual(p=SIM):
+    s = _start(p)
+    s.code(CODE)
+    s.settle(4)
+    s.mark("abierto")
+    s.press("BTND")                 # cierra sin esperar el temporizador
+    s.mark("cerrado")
+    s.code(CODE)
+    s.settle(4)
+    s.press_together(["BTNU", "BTND"])
+    s.mark("btnd_gana")             # BTND > BTNU: cierra
+    return s
+
+
+def ex11_btnr_no_borra_intentos(p=SIM):
+    s = _start(p)
+    for value in WRONGS[:p.max_attempts - 1]:
+        s.code(value)
+        _wait_error_end(s)
+        s.press("BTNR")             # cancelar no devuelve los intentos
+        s.settle(6)
+    s.mark("antes_ultimo")
+    s.code(WRONGS[p.max_attempts - 1])
+    _wait_error_end(s)
+    s.mark("alarma")
     return s
 
 
@@ -385,7 +402,7 @@ SCENARIOS = {
     "tc01_reset_en_cualquier_estado": tc01_reset_en_cualquier_estado,
     "tc02_secuencia_correcta": tc02_secuencia_correcta,
     "tc03_incorrecta_bajo_el_maximo": tc03_incorrecta_bajo_el_maximo,
-    "tc04_tres_incorrectas_consecutivas": tc04_tres_incorrectas_consecutivas,
+    "tc04_cinco_incorrectas_consecutivas": tc04_cinco_incorrectas_consecutivas,
     "tc05_alarma_ignora_entradas": tc05_alarma_ignora_entradas,
     "tc06_alarma_reset_o_timeout": tc06_alarma_reset_o_timeout,
     "tc07_rebotes_y_pulsos_cortos": tc07_rebotes_y_pulsos_cortos,
@@ -399,6 +416,8 @@ SCENARIOS = {
     "ex05_pulsaciones_simultaneas": ex05_pulsaciones_simultaneas,
     "ex06_error_cuenta_una_vez": ex06_error_cuenta_una_vez,
     "ex07_entradas_en_error_se_ignoran": ex07_entradas_en_error_se_ignoran,
-    "ex08_botones_no_usados": ex08_botones_no_usados,
+    "ex08_botones_sin_funcion": ex08_botones_sin_funcion,
     "ex09_secuencia_completa_uart": ex09_secuencia_completa_uart,
+    "ex10_cierre_manual": ex10_cierre_manual,
+    "ex11_btnr_no_borra_intentos": ex11_btnr_no_borra_intentos,
 }

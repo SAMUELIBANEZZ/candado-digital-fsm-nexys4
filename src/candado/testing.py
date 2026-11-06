@@ -27,7 +27,8 @@ BUTTONS = ("BTNC", "BTNU", "BTND", "BTNL", "BTNR")
 
 # Bits de la palabra de entrada / salida usada en los vectores VHDL.
 IN_WIDTH = 22    # [21]=CPU_RESETN [20]=BTNC [19]=BTNU [18]=BTND [17]=BTNL [16]=BTNR [15:0]=SW
-OUT_WIDTH = 36   # [35:20]=LED [19:13]=SEG [12]=DP [11:4]=AN [3]=LED16_R [2]=LED16_G [1]=LED16_B [0]=UART
+OUT_WIDTH = 39   # [38:23]=LED [22:16]=SEG [15]=DP [14:7]=AN [6]=LED16_R [5]=LED16_G [4]=LED16_B
+                 # [3]=UART [2]=AUD_PWM [1]=AUD_SD [0]=BUZZER
 
 
 # --------------------------------------------------------------------------
@@ -133,16 +134,16 @@ class Stimulus:
         return self._emit(gap)
 
     # -- operaciones de alto nivel -------------------------------------------
-    def digit(self, d, mode=False):
-        """Fija SW3..SW0 (y SW15 si ``mode``) y confirma con BTNC."""
-        self.set_sw((d & 0xF) | (0x8000 if mode else 0))
+    def digit(self, d):
+        """Fija SW3..SW0 y confirma con BTNC."""
+        self.set_sw(d & 0xF)
         self._emit(4)
         return self.press("BTNC")
 
-    def code(self, value, mode=False):
+    def code(self, value):
         """Ingresa un código de 4 dígitos hexadecimales (MSB primero)."""
         for shift in (12, 8, 4, 0):
-            self.digit((value >> shift) & 0xF, mode=mode)
+            self.digit((value >> shift) & 0xF)
         return self
 
     def settle(self, cycles=4):
@@ -209,13 +210,18 @@ class TopTrace:
     an: list = field(default_factory=list)
     rgb: list = field(default_factory=list)
     uart: list = field(default_factory=list)
+    aud_pwm: list = field(default_factory=list)
+    aud_sd: list = field(default_factory=list)
+    buzzer: list = field(default_factory=list)
 
     def out_words(self):
         words = []
         for k in range(len(self.led)):
-            words.append((self.led[k] << 20) | (self.seg[k] << 13)
-                         | (self.dp[k] << 12) | (self.an[k] << 4)
-                         | (self.rgb[k] << 1) | self.uart[k])
+            words.append((self.led[k] << 23) | (self.seg[k] << 16)
+                         | (self.dp[k] << 15) | (self.an[k] << 7)
+                         | (self.rgb[k] << 4) | (self.uart[k] << 3)
+                         | (self.aud_pwm[k] << 2) | (self.aud_sd[k] << 1)
+                         | self.buzzer[k])
         return words
 
 
@@ -247,16 +253,18 @@ def _core_bench(stim, p, trace):
     btnc = Signal(False)
     btnl = Signal(False)
     btnr = Signal(False)
+    btnu = Signal(False)
+    btnd = Signal(False)
     sw_digit = Signal(intbv(0)[4:])
-    sw_mode = Signal(False)
     state_code = Signal(intbv(0)[3:])
     count = Signal(intbv(0, min=0, max=5))
     fail = Signal(intbv(0, min=0, max=p.max_attempts + 1))
     left = Signal(intbv(0, min=0, max=p.max_attempts + 1))
     code = Signal(intbv(p.default_code)[16:])
+    seq = Signal(intbv(0)[16:])
 
-    dut = candado_core(clk, rst, btnc, btnl, btnr, sw_digit, sw_mode,
-                       state_code, count, fail, left, code,
+    dut = candado_core(clk, rst, btnc, btnl, btnr, btnu, btnd, sw_digit,
+                       state_code, count, fail, left, code, seq,
                        p.debounce_cycles, p.tick_cycles, p.error_ticks,
                        p.unlocked_ticks, p.alarm_ticks, p.config_ticks,
                        p.max_attempts, p.tick_max, p.default_code)
@@ -266,8 +274,9 @@ def _core_bench(stim, p, trace):
         btnc.next = v.btnc
         btnl.next = v.btnl
         btnr.next = v.btnr
+        btnu.next = v.btnu
+        btnd.next = v.btnd
         sw_digit.next = v.sw & 0xF
-        sw_mode.next = bool(v.sw & 0x8000)
 
     def sample():
         trace.state.append(int(state_code))
@@ -305,10 +314,14 @@ def _top_bench(stim, p, enable_uart, trace):
     LED16_G = Signal(False)
     LED16_B = Signal(False)
     UART_RXD_OUT = Signal(True)
+    AUD_PWM = Signal(False)
+    AUD_SD = Signal(False)
+    BUZZER = Signal(False)
 
     dut = candado_top(CLK100MHZ, CPU_RESETN, SW, BTNC, BTNU, BTND, BTNL, BTNR,
                       LED, SEG, DP, AN, LED16_R, LED16_G, LED16_B,
-                      UART_RXD_OUT, p=p, enable_uart=enable_uart)
+                      UART_RXD_OUT, AUD_PWM, AUD_SD, BUZZER, p=p,
+                      enable_uart=enable_uart)
 
     def apply_vec(v):
         CPU_RESETN.next = v.rstn
@@ -326,6 +339,9 @@ def _top_bench(stim, p, enable_uart, trace):
         trace.an.append(int(AN))
         trace.rgb.append((int(LED16_R) << 2) | (int(LED16_G) << 1) | int(LED16_B))
         trace.uart.append(int(UART_RXD_OUT))
+        trace.aud_pwm.append(int(AUD_PWM))
+        trace.aud_sd.append(int(AUD_SD))
+        trace.buzzer.append(int(BUZZER))
 
     drv = _clock_and_driver(CLK100MHZ, stim, apply_vec, sample)
     return instances()

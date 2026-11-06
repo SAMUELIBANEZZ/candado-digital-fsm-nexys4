@@ -21,7 +21,7 @@ from candado.testing import (CoreTrace, TopTrace, _core_bench, _top_bench)  # no
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
-    ap.add_argument("escenario", nargs="?", default="tc04_tres_incorrectas_consecutivas",
+    ap.add_argument("escenario", nargs="?", default="tc04_cinco_incorrectas_consecutivas",
                     choices=sorted(SCENARIOS))
     ap.add_argument("--top", action="store_true")
     ap.add_argument("--dir", default="build")

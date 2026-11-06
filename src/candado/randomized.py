@@ -54,9 +54,9 @@ def random_stimulus(p: Params, seed: int, events: int = 60):
                 continue
             return
 
-    def press(buttons, digit=None, mode=False, bounce=True):
+    def press(buttons, digit=None, bounce=True):
         if digit is not None:
-            s.set_sw((digit & 0xF) | (0x8000 if mode else 0))
+            s.set_sw(digit & 0xF)
             wait(4)
         simultaneous = len(buttons) > 1
         effect, duration = press_geometry(p, simultaneous, bounce)
@@ -66,7 +66,7 @@ def random_stimulus(p: Params, seed: int, events: int = 60):
         else:
             s.press(next(iter(buttons)), bounce=bounce)
         model.advance(effect)
-        model.press(buttons, digit or 0, mode)
+        model.press(buttons, digit or 0)
         model.advance(duration - effect)
 
     s.reset_hard()
@@ -78,17 +78,16 @@ def random_stimulus(p: Params, seed: int, events: int = 60):
     for n in range(events):
         r = rng.random()
         bounce = rng.random() < 0.7
-        mode = rng.random() < 0.25
         if r < 0.38:                                   # un dígito
-            press({"BTNC"}, rng.randrange(16), mode, bounce)
+            press({"BTNC"}, rng.randrange(16), bounce)
         elif r < 0.50:                                 # código completo (correcto o con 1 error)
             digits = [(model.code >> sh) & 0xF for sh in (12, 8, 4, 0)]
             if rng.random() < 0.4:
                 digits[rng.randrange(4)] ^= 1 << rng.randrange(4)
             for dgt in digits:
-                press({"BTNC"}, dgt, False, rng.random() < 0.7)
-            if rng.random() < 0.4:                     # si abrió, intenta entrar a CONFIG (SW15)
-                press({"BTNC"}, rng.randrange(16), True, bounce)
+                press({"BTNC"}, dgt, rng.random() < 0.7)
+            if rng.random() < 0.4:                     # si abrió, intenta entrar a CONFIG
+                press({"BTNU"}, bounce=bounce)
         elif r < 0.60:                                 # borrar
             press({"BTNL"}, bounce=bounce)
         elif r < 0.65:                                 # BTNR
@@ -99,12 +98,13 @@ def random_stimulus(p: Params, seed: int, events: int = 60):
             model.hard_reset()
             model.advance(5 + d + 2)
         elif r < 0.72:                                 # simultáneas
-            combo = rng.choice([{"BTNC", "BTNL"}, {"BTNC", "BTNR"}, {"BTNL", "BTNR"}])
-            press(combo, rng.randrange(16), mode, False)
-        elif r < 0.76:                                 # botones sin función
+            combo = rng.choice([{"BTNC", "BTNL"}, {"BTNC", "BTNR"}, {"BTNL", "BTNR"},
+                                {"BTNU", "BTND"}])
+            press(combo, rng.randrange(16), False)
+        elif r < 0.76:                                 # BTNU (CONFIG) / BTND (cerrar)
             press({rng.choice(["BTNU", "BTND"])}, bounce=bounce)
         elif r < 0.82:                                 # pulso espurio (< antirrebote)
-            btn = rng.choice(["BTNC", "BTNL", "BTNR"])
+            btn = rng.choice(["BTNC", "BTNL", "BTNR", "BTNU", "BTND"])
             length = rng.randrange(1, max(2, d // 2 + 1))
             dur = length + d + 8
             clear_of_timeout(dur, dur)

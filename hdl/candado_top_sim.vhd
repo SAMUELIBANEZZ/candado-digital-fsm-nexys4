@@ -26,7 +26,10 @@ entity candado_top_sim is
         LED16_R: out std_logic;
         LED16_G: out std_logic;
         LED16_B: out std_logic;
-        UART_RXD_OUT: out std_logic
+        UART_RXD_OUT: out std_logic;
+        AUD_PWM: out std_logic;
+        AUD_SD: out std_logic;
+        BUZZER: out std_logic
     );
 end entity candado_top_sim;
 
@@ -35,7 +38,7 @@ architecture MyHDL of candado_top_sim is
 
 
 type t_enum_t_state_1 is (
-	IDLE,
+	LOCKED,
 	INPUT,
 	VALIDATE,
 	UNLOCKED,
@@ -51,25 +54,29 @@ signal AN_num: unsigned(7 downto 0) := to_unsigned(0, 8);
 signal rst: std_logic := '1';
 signal rst_s1: std_logic := '1';
 signal sw_digit: unsigned(3 downto 0) := to_unsigned(0, 4);
-signal sw_mode: std_logic := '0';
+signal tone: std_logic := '0';
+signal amp_on: std_logic := '0';
 signal seg_raw: unsigned(6 downto 0) := to_unsigned(0, 7);
 signal an_raw: unsigned(7 downto 0) := to_unsigned(0, 8);
 signal rgb: unsigned(2 downto 0) := to_unsigned(0, 3);
 signal candado_core0_0_state_code: unsigned(2 downto 0) := to_unsigned(0, 3);
 signal candado_core0_0_count: unsigned(2 downto 0) := to_unsigned(0, 3);
-signal candado_core0_0_fail: unsigned(1 downto 0) := to_unsigned(0, 2);
-signal candado_core0_0_attempts_left: unsigned(1 downto 0) := to_unsigned(0, 2);
+signal candado_core0_0_fail: unsigned(2 downto 0) := to_unsigned(0, 3);
+signal candado_core0_0_attempts_left: unsigned(2 downto 0) := to_unsigned(0, 3);
 signal candado_core0_0_code: unsigned(15 downto 0) := to_unsigned(4660, 16);
+signal candado_core0_0_seq: unsigned(15 downto 0) := to_unsigned(0, 16);
 signal candado_core0_0_c_level: std_logic := '0';
 signal candado_core0_0_c_pulse: std_logic := '0';
 signal candado_core0_0_l_level: std_logic := '0';
 signal candado_core0_0_l_pulse: std_logic := '0';
 signal candado_core0_0_r_level: std_logic := '0';
 signal candado_core0_0_r_pulse: std_logic := '0';
-signal candado_core0_0_sw_s1: unsigned(4 downto 0) := to_unsigned(0, 5);
-signal candado_core0_0_sw_s2: unsigned(4 downto 0) := to_unsigned(0, 5);
+signal candado_core0_0_u_level: std_logic := '0';
+signal candado_core0_0_u_pulse: std_logic := '0';
+signal candado_core0_0_d_level: std_logic := '0';
+signal candado_core0_0_d_pulse: std_logic := '0';
+signal candado_core0_0_sw_s1: unsigned(3 downto 0) := to_unsigned(0, 4);
 signal candado_core0_0_digit: unsigned(3 downto 0) := to_unsigned(0, 4);
-signal candado_core0_0_mode: std_logic := '0';
 signal candado_core0_0_debouncer0_0_s2: std_logic := '0';
 signal candado_core0_0_debouncer0_0_stable: std_logic := '0';
 signal candado_core0_0_debouncer0_0_cnt: unsigned(2 downto 0) := to_unsigned(0, 3);
@@ -85,13 +92,22 @@ signal candado_core0_0_debouncer2_0_stable: std_logic := '0';
 signal candado_core0_0_debouncer2_0_cnt: unsigned(2 downto 0) := to_unsigned(0, 3);
 signal candado_core0_0_debouncer2_0_prev: std_logic := '0';
 signal candado_core0_0_debouncer2_0_synchronizer2_0_s1: std_logic := '0';
+signal candado_core0_0_debouncer3_0_s2: std_logic := '0';
+signal candado_core0_0_debouncer3_0_stable: std_logic := '0';
+signal candado_core0_0_debouncer3_0_cnt: unsigned(2 downto 0) := to_unsigned(0, 3);
+signal candado_core0_0_debouncer3_0_prev: std_logic := '0';
+signal candado_core0_0_debouncer3_0_synchronizer3_0_s1: std_logic := '0';
+signal candado_core0_0_debouncer4_0_s2: std_logic := '0';
+signal candado_core0_0_debouncer4_0_stable: std_logic := '0';
+signal candado_core0_0_debouncer4_0_cnt: unsigned(2 downto 0) := to_unsigned(0, 3);
+signal candado_core0_0_debouncer4_0_prev: std_logic := '0';
+signal candado_core0_0_debouncer4_0_synchronizer4_0_s1: std_logic := '0';
 signal candado_core0_0_tick_timer0_0_clear: std_logic := '0';
 signal candado_core0_0_tick_timer0_0_tick: std_logic := '0';
 signal candado_core0_0_tick_timer0_0_cnt: unsigned(5 downto 0) := to_unsigned(0, 6);
 signal candado_core0_0_digit_buffer0_0_clear: std_logic := '0';
 signal candado_core0_0_digit_buffer0_0_push: std_logic := '0';
 signal candado_core0_0_digit_buffer0_0_delete: std_logic := '0';
-signal candado_core0_0_digit_buffer0_0_seq: unsigned(15 downto 0) := to_unsigned(0, 16);
 signal candado_core0_0_digit_buffer0_0_cnt: unsigned(2 downto 0) := to_unsigned(0, 3);
 signal candado_core0_0_digit_buffer0_0_d0: unsigned(3 downto 0) := to_unsigned(0, 4);
 signal candado_core0_0_digit_buffer0_0_d1: unsigned(3 downto 0) := to_unsigned(0, 4);
@@ -99,25 +115,35 @@ signal candado_core0_0_digit_buffer0_0_d2: unsigned(3 downto 0) := to_unsigned(0
 signal candado_core0_0_digit_buffer0_0_d3: unsigned(3 downto 0) := to_unsigned(0, 4);
 signal candado_core0_0_code_register0_0_we: std_logic := '0';
 signal candado_core0_0_code_comparator0_0_match: std_logic := '0';
-signal candado_core0_0_fsm_control0_0_fail_r: unsigned(1 downto 0) := to_unsigned(0, 2);
-signal candado_core0_0_fsm_control0_0_next_state: t_enum_t_state_1 := IDLE;
-signal candado_core0_0_fsm_control0_0_state: t_enum_t_state_1 := IDLE;
+signal candado_core0_0_fsm_control0_0_fail_r: unsigned(2 downto 0) := to_unsigned(0, 3);
+signal candado_core0_0_fsm_control0_0_next_state: t_enum_t_state_1 := LOCKED;
+signal candado_core0_0_fsm_control0_0_state: t_enum_t_state_1 := LOCKED;
 signal candado_core0_0_fsm_control0_0_tcount: unsigned(3 downto 0) := to_unsigned(0, 4);
 signal candado_core0_0_fsm_control0_0_timeout: std_logic := '0';
+signal alarm_outputs0_0_blink: std_logic := '0';
+signal alarm_outputs0_0_bcnt: unsigned(5 downto 0) := to_unsigned(0, 6);
+signal alarm_outputs0_0_in_alarm: std_logic := '0';
+signal alarm_outputs0_0_sq: std_logic := '0';
+signal alarm_outputs0_0_tcnt: unsigned(2 downto 0) := to_unsigned(0, 3);
 signal display_driver0_0_an_sel: unsigned(7 downto 0) := to_unsigned(0, 8);
+signal display_driver0_0_cidx: unsigned(2 downto 0) := to_unsigned(0, 3);
 signal display_driver0_0_cnt: unsigned(4 downto 0) := to_unsigned(0, 5);
 signal display_driver0_0_gidx: unsigned(4 downto 0) := to_unsigned(0, 5);
 signal display_driver0_0_gpat: unsigned(6 downto 0) := to_unsigned(0, 7);
+signal display_driver0_0_nibble: unsigned(3 downto 0) := to_unsigned(0, 4);
 signal display_driver0_0_pos: unsigned(2 downto 0) := to_unsigned(0, 3);
-signal display_driver0_0_waddr: unsigned(4 downto 0) := to_unsigned(0, 5);
+signal display_driver0_0_slot: unsigned(1 downto 0) := to_unsigned(0, 2);
+signal display_driver0_0_waddr: unsigned(5 downto 0) := to_unsigned(0, 6);
 signal display_driver0_0_wchar: unsigned(4 downto 0) := to_unsigned(0, 5);
 signal status_outputs0_0_f_alarm: std_logic := '0';
 signal status_outputs0_0_f_config: std_logic := '0';
 signal status_outputs0_0_f_error: std_logic := '0';
+signal status_outputs0_0_f_locked: std_logic := '0';
 signal status_outputs0_0_f_unlocked: std_logic := '0';
 signal status_outputs0_0_pwm_cnt: unsigned(3 downto 0) := to_unsigned(0, 4);
 signal status_outputs0_0_rgb_raw: unsigned(2 downto 0) := to_unsigned(0, 3);
 signal status_outputs0_0_therm: unsigned(3 downto 0) := to_unsigned(0, 4);
+signal status_outputs0_0_tries: unsigned(4 downto 0) := to_unsigned(0, 5);
 signal event_logger0_0_tbusy: std_logic := '0';
 signal event_logger0_0_tdata: unsigned(7 downto 0) := to_unsigned(0, 8);
 signal event_logger0_0_tstart: std_logic := '0';
@@ -125,7 +151,7 @@ signal event_logger0_0_idx: unsigned(3 downto 0) := to_unsigned(0, 4);
 signal event_logger0_0_raddr: unsigned(5 downto 0) := to_unsigned(0, 6);
 signal event_logger0_0_msg_state: unsigned(2 downto 0) := to_unsigned(0, 3);
 signal event_logger0_0_rchar: unsigned(7 downto 0) := to_unsigned(0, 8);
-signal event_logger0_0_msg_fail: unsigned(1 downto 0) := to_unsigned(0, 2);
+signal event_logger0_0_msg_fail: unsigned(2 downto 0) := to_unsigned(0, 3);
 signal event_logger0_0_prev: unsigned(2 downto 0) := to_unsigned(0, 3);
 signal event_logger0_0_phase: unsigned(1 downto 0) := to_unsigned(0, 2);
 signal event_logger0_0_pending: std_logic := '0';
@@ -154,7 +180,6 @@ end process rst_sync;
 
 
 sw_digit <= SW_num(4-1 downto 0);
-sw_mode <= SW_num(15);
 
 candado_core0_0_debouncer0_0_synchronizer0_0_seq: process (CLK100MHZ) is
 begin
@@ -237,17 +262,67 @@ end process candado_core0_0_debouncer2_0_seq;
 candado_core0_0_r_level <= candado_core0_0_debouncer2_0_stable;
 candado_core0_0_r_pulse <= stdl(bool(candado_core0_0_debouncer2_0_stable) and (not bool(candado_core0_0_debouncer2_0_prev)));
 
+candado_core0_0_debouncer3_0_synchronizer3_0_seq: process (CLK100MHZ) is
+begin
+    if rising_edge(CLK100MHZ) then
+        candado_core0_0_debouncer3_0_synchronizer3_0_s1 <= BTNU;
+        candado_core0_0_debouncer3_0_s2 <= candado_core0_0_debouncer3_0_synchronizer3_0_s1;
+    end if;
+end process candado_core0_0_debouncer3_0_synchronizer3_0_seq;
+
+candado_core0_0_debouncer3_0_seq: process (CLK100MHZ) is
+begin
+    if rising_edge(CLK100MHZ) then
+        if (candado_core0_0_debouncer3_0_s2 = candado_core0_0_debouncer3_0_stable) then
+            candado_core0_0_debouncer3_0_cnt <= to_unsigned(0, 3);
+        elsif (signed(resize(candado_core0_0_debouncer3_0_cnt, 4)) = (8 - 1)) then
+            candado_core0_0_debouncer3_0_cnt <= to_unsigned(0, 3);
+            candado_core0_0_debouncer3_0_stable <= candado_core0_0_debouncer3_0_s2;
+        else
+            candado_core0_0_debouncer3_0_cnt <= (candado_core0_0_debouncer3_0_cnt + 1);
+        end if;
+        candado_core0_0_debouncer3_0_prev <= candado_core0_0_debouncer3_0_stable;
+    end if;
+end process candado_core0_0_debouncer3_0_seq;
+
+
+candado_core0_0_u_level <= candado_core0_0_debouncer3_0_stable;
+candado_core0_0_u_pulse <= stdl(bool(candado_core0_0_debouncer3_0_stable) and (not bool(candado_core0_0_debouncer3_0_prev)));
+
+candado_core0_0_debouncer4_0_synchronizer4_0_seq: process (CLK100MHZ) is
+begin
+    if rising_edge(CLK100MHZ) then
+        candado_core0_0_debouncer4_0_synchronizer4_0_s1 <= BTND;
+        candado_core0_0_debouncer4_0_s2 <= candado_core0_0_debouncer4_0_synchronizer4_0_s1;
+    end if;
+end process candado_core0_0_debouncer4_0_synchronizer4_0_seq;
+
+candado_core0_0_debouncer4_0_seq: process (CLK100MHZ) is
+begin
+    if rising_edge(CLK100MHZ) then
+        if (candado_core0_0_debouncer4_0_s2 = candado_core0_0_debouncer4_0_stable) then
+            candado_core0_0_debouncer4_0_cnt <= to_unsigned(0, 3);
+        elsif (signed(resize(candado_core0_0_debouncer4_0_cnt, 4)) = (8 - 1)) then
+            candado_core0_0_debouncer4_0_cnt <= to_unsigned(0, 3);
+            candado_core0_0_debouncer4_0_stable <= candado_core0_0_debouncer4_0_s2;
+        else
+            candado_core0_0_debouncer4_0_cnt <= (candado_core0_0_debouncer4_0_cnt + 1);
+        end if;
+        candado_core0_0_debouncer4_0_prev <= candado_core0_0_debouncer4_0_stable;
+    end if;
+end process candado_core0_0_debouncer4_0_seq;
+
+
+candado_core0_0_d_level <= candado_core0_0_debouncer4_0_stable;
+candado_core0_0_d_pulse <= stdl(bool(candado_core0_0_debouncer4_0_stable) and (not bool(candado_core0_0_debouncer4_0_prev)));
+
 candado_core0_0_sw_sync: process (CLK100MHZ) is
 begin
     if rising_edge(CLK100MHZ) then
-        candado_core0_0_sw_s1 <= unsigned'(sw_mode & sw_digit);
-        candado_core0_0_sw_s2 <= candado_core0_0_sw_s1;
+        candado_core0_0_sw_s1 <= sw_digit;
+        candado_core0_0_digit <= candado_core0_0_sw_s1;
     end if;
 end process candado_core0_0_sw_sync;
-
-
-candado_core0_0_digit <= candado_core0_0_sw_s2(4-1 downto 0);
-candado_core0_0_mode <= candado_core0_0_sw_s2(4);
 
 candado_core0_0_tick_timer0_0_seq: process (CLK100MHZ) is
 begin
@@ -294,7 +369,7 @@ end process candado_core0_0_digit_buffer0_0_regs;
 
 
 candado_core0_0_count <= candado_core0_0_digit_buffer0_0_cnt;
-candado_core0_0_digit_buffer0_0_seq <= unsigned'(candado_core0_0_digit_buffer0_0_d0 & candado_core0_0_digit_buffer0_0_d1 & candado_core0_0_digit_buffer0_0_d2 & candado_core0_0_digit_buffer0_0_d3);
+candado_core0_0_seq <= unsigned'(candado_core0_0_digit_buffer0_0_d0 & candado_core0_0_digit_buffer0_0_d1 & candado_core0_0_digit_buffer0_0_d2 & candado_core0_0_digit_buffer0_0_d3);
 
 candado_core0_0_code_register0_0_seq: process (CLK100MHZ) is
 begin
@@ -302,21 +377,21 @@ begin
         if bool(rst) then
             candado_core0_0_code <= to_unsigned(4660, 16);
         elsif bool(candado_core0_0_code_register0_0_we) then
-            candado_core0_0_code <= candado_core0_0_digit_buffer0_0_seq;
+            candado_core0_0_code <= candado_core0_0_seq;
         end if;
     end if;
 end process candado_core0_0_code_register0_0_seq;
 
 
-candado_core0_0_code_comparator0_0_match <= stdl(candado_core0_0_digit_buffer0_0_seq = candado_core0_0_code);
+candado_core0_0_code_comparator0_0_match <= stdl(candado_core0_0_seq = candado_core0_0_code);
 
 candado_core0_0_fsm_control0_0_seq: process (CLK100MHZ) is
 begin
     if rising_edge(CLK100MHZ) then
         if bool(rst) then
-            candado_core0_0_fsm_control0_0_state <= IDLE;
+            candado_core0_0_fsm_control0_0_state <= LOCKED;
             candado_core0_0_fsm_control0_0_tcount <= to_unsigned(0, 4);
-            candado_core0_0_fsm_control0_0_fail_r <= to_unsigned(0, 2);
+            candado_core0_0_fsm_control0_0_fail_r <= to_unsigned(0, 3);
         else
             candado_core0_0_fsm_control0_0_state <= candado_core0_0_fsm_control0_0_next_state;
             if (candado_core0_0_fsm_control0_0_next_state /= candado_core0_0_fsm_control0_0_state) then
@@ -324,16 +399,14 @@ begin
             elsif (bool(candado_core0_0_tick_timer0_0_tick) and (candado_core0_0_fsm_control0_0_tcount < 15)) then
                 candado_core0_0_fsm_control0_0_tcount <= (candado_core0_0_fsm_control0_0_tcount + 1);
             end if;
-            if bool(candado_core0_0_r_pulse) then
-                candado_core0_0_fsm_control0_0_fail_r <= to_unsigned(0, 2);
-            elsif (candado_core0_0_fsm_control0_0_state = VALIDATE) then
+            if (candado_core0_0_fsm_control0_0_state = VALIDATE) then
                 if bool(candado_core0_0_code_comparator0_0_match) then
-                    candado_core0_0_fsm_control0_0_fail_r <= to_unsigned(0, 2);
-                elsif (candado_core0_0_fsm_control0_0_fail_r < 3) then
+                    candado_core0_0_fsm_control0_0_fail_r <= to_unsigned(0, 3);
+                elsif (candado_core0_0_fsm_control0_0_fail_r < 5) then
                     candado_core0_0_fsm_control0_0_fail_r <= (candado_core0_0_fsm_control0_0_fail_r + 1);
                 end if;
-            elsif ((candado_core0_0_fsm_control0_0_state = ALARM) and (candado_core0_0_fsm_control0_0_next_state = IDLE)) then
-                candado_core0_0_fsm_control0_0_fail_r <= to_unsigned(0, 2);
+            elsif ((candado_core0_0_fsm_control0_0_state = ALARM) and (candado_core0_0_fsm_control0_0_next_state = LOCKED)) then
+                candado_core0_0_fsm_control0_0_fail_r <= to_unsigned(0, 3);
             end if;
         end if;
     end if;
@@ -361,17 +434,21 @@ begin
     end if;
 end process candado_core0_0_fsm_control0_0_timeout_logic;
 
-candado_core0_0_fsm_control0_0_comb: process (candado_core0_0_c_pulse, candado_core0_0_code_comparator0_0_match, candado_core0_0_count, candado_core0_0_fsm_control0_0_fail_r, candado_core0_0_fsm_control0_0_state, candado_core0_0_fsm_control0_0_timeout, candado_core0_0_l_pulse, candado_core0_0_mode, candado_core0_0_r_pulse) is
+candado_core0_0_fsm_control0_0_comb: process (candado_core0_0_c_pulse, candado_core0_0_code_comparator0_0_match, candado_core0_0_count, candado_core0_0_d_pulse, candado_core0_0_fsm_control0_0_fail_r, candado_core0_0_fsm_control0_0_state, candado_core0_0_fsm_control0_0_timeout, candado_core0_0_l_pulse, candado_core0_0_r_pulse, candado_core0_0_u_pulse) is
 begin
     candado_core0_0_fsm_control0_0_next_state <= candado_core0_0_fsm_control0_0_state;
     candado_core0_0_digit_buffer0_0_push <= '0';
     candado_core0_0_digit_buffer0_0_delete <= '0';
     candado_core0_0_digit_buffer0_0_clear <= '0';
     candado_core0_0_code_register0_0_we <= '0';
-    if bool(candado_core0_0_r_pulse) then
-        candado_core0_0_fsm_control0_0_next_state <= IDLE;
+    if (candado_core0_0_fsm_control0_0_state = ALARM) then
+        if bool(candado_core0_0_fsm_control0_0_timeout) then
+            candado_core0_0_fsm_control0_0_next_state <= LOCKED;
+        end if;
+    elsif bool(candado_core0_0_r_pulse) then
+        candado_core0_0_fsm_control0_0_next_state <= LOCKED;
         candado_core0_0_digit_buffer0_0_clear <= '1';
-    elsif (candado_core0_0_fsm_control0_0_state = IDLE) then
+    elsif (candado_core0_0_fsm_control0_0_state = LOCKED) then
         if (bool(candado_core0_0_c_pulse) and (not bool(candado_core0_0_l_pulse))) then
             candado_core0_0_digit_buffer0_0_push <= '1';
             candado_core0_0_fsm_control0_0_next_state <= INPUT;
@@ -383,8 +460,8 @@ begin
             if (candado_core0_0_count > 0) then
                 candado_core0_0_digit_buffer0_0_delete <= '1';
             end if;
-            if (candado_core0_0_count = 1) then
-                candado_core0_0_fsm_control0_0_next_state <= IDLE;
+            if (candado_core0_0_count <= 1) then
+                candado_core0_0_fsm_control0_0_next_state <= LOCKED;
             end if;
         elsif bool(candado_core0_0_c_pulse) then
             candado_core0_0_digit_buffer0_0_push <= '1';
@@ -397,27 +474,22 @@ begin
             candado_core0_0_fsm_control0_0_next_state <= ERROR;
         end if;
     elsif (candado_core0_0_fsm_control0_0_state = UNLOCKED) then
-        if bool(candado_core0_0_fsm_control0_0_timeout) then
-            candado_core0_0_fsm_control0_0_next_state <= IDLE;
-        elsif (bool(candado_core0_0_c_pulse) and bool(candado_core0_0_mode) and (not bool(candado_core0_0_l_pulse))) then
-            candado_core0_0_digit_buffer0_0_push <= '1';
+        if (bool(candado_core0_0_fsm_control0_0_timeout) or bool(candado_core0_0_d_pulse)) then
+            candado_core0_0_fsm_control0_0_next_state <= LOCKED;
+        elsif bool(candado_core0_0_u_pulse) then
             candado_core0_0_fsm_control0_0_next_state <= CONFIG;
         end if;
     elsif (candado_core0_0_fsm_control0_0_state = ERROR) then
         if bool(candado_core0_0_fsm_control0_0_timeout) then
-            if (candado_core0_0_fsm_control0_0_fail_r >= 3) then
+            if (candado_core0_0_fsm_control0_0_fail_r >= 5) then
                 candado_core0_0_fsm_control0_0_next_state <= ALARM;
             else
-                candado_core0_0_fsm_control0_0_next_state <= INPUT;
+                candado_core0_0_fsm_control0_0_next_state <= LOCKED;
             end if;
-        end if;
-    elsif (candado_core0_0_fsm_control0_0_state = ALARM) then
-        if bool(candado_core0_0_fsm_control0_0_timeout) then
-            candado_core0_0_fsm_control0_0_next_state <= IDLE;
         end if;
     elsif (candado_core0_0_fsm_control0_0_state = CONFIG) then
         if bool(candado_core0_0_fsm_control0_0_timeout) then
-            candado_core0_0_fsm_control0_0_next_state <= IDLE;
+            candado_core0_0_fsm_control0_0_next_state <= LOCKED;
             candado_core0_0_digit_buffer0_0_clear <= '1';
         elsif (candado_core0_0_count = 4) then
             candado_core0_0_code_register0_0_we <= '1';
@@ -439,7 +511,7 @@ candado_core0_0_tick_timer0_0_clear <= stdl(candado_core0_0_fsm_control0_0_next_
 candado_core0_0_fsm_control0_0_outputs: process (candado_core0_0_fsm_control0_0_state) is
 begin
     case candado_core0_0_fsm_control0_0_state is
-        when IDLE =>
+        when LOCKED =>
             candado_core0_0_state_code <= to_unsigned(0, 3);
         when INPUT =>
             candado_core0_0_state_code <= to_unsigned(1, 3);
@@ -460,7 +532,42 @@ end process candado_core0_0_fsm_control0_0_outputs;
 candado_core0_0_fail <= candado_core0_0_fsm_control0_0_fail_r;
 
 
-candado_core0_0_attempts_left <= (3 - candado_core0_0_fail);
+candado_core0_0_attempts_left <= (5 - candado_core0_0_fail);
+
+alarm_outputs0_0_blink_counter: process (CLK100MHZ) is
+begin
+    if rising_edge(CLK100MHZ) then
+        alarm_outputs0_0_bcnt <= (alarm_outputs0_0_bcnt + 1);
+    end if;
+end process alarm_outputs0_0_blink_counter;
+
+
+alarm_outputs0_0_blink <= alarm_outputs0_0_bcnt((6 - 1));
+alarm_outputs0_0_in_alarm <= stdl(candado_core0_0_state_code = 5);
+
+alarm_outputs0_0_tone_gen: process (CLK100MHZ) is
+begin
+    if rising_edge(CLK100MHZ) then
+        if (not bool(alarm_outputs0_0_in_alarm)) then
+            alarm_outputs0_0_tcnt <= to_unsigned(0, 3);
+            alarm_outputs0_0_sq <= '0';
+        elsif ((bool(alarm_outputs0_0_blink) and (signed(resize(alarm_outputs0_0_tcnt, 4)) >= (3 - 1))) or ((not bool(alarm_outputs0_0_blink)) and (signed(resize(alarm_outputs0_0_tcnt, 4)) >= (5 - 1)))) then
+            alarm_outputs0_0_tcnt <= to_unsigned(0, 3);
+            alarm_outputs0_0_sq <= stdl((not bool(alarm_outputs0_0_sq)));
+        else
+            alarm_outputs0_0_tcnt <= (alarm_outputs0_0_tcnt + 1);
+        end if;
+    end if;
+end process alarm_outputs0_0_tone_gen;
+
+
+tone <= alarm_outputs0_0_sq;
+amp_on <= alarm_outputs0_0_in_alarm;
+
+
+AUD_PWM <= tone;
+AUD_SD <= amp_on;
+BUZZER <= tone;
 
 display_driver0_0_scan: process (CLK100MHZ) is
 begin
@@ -472,95 +579,148 @@ end process display_driver0_0_scan;
 
 display_driver0_0_pos <= display_driver0_0_cnt(5-1 downto (5 - 3));
 
-display_driver0_0_addr_logic: process (candado_core0_0_state_code, display_driver0_0_pos) is
-begin
-    case display_driver0_0_pos is
-        when "111" =>
-            display_driver0_0_waddr <= unsigned'(candado_core0_0_state_code & to_unsigned(0, 2));
-        when "110" =>
-            display_driver0_0_waddr <= unsigned'(candado_core0_0_state_code & to_unsigned(1, 2));
-        when "101" =>
-            display_driver0_0_waddr <= unsigned'(candado_core0_0_state_code & to_unsigned(2, 2));
-        when others =>
-            display_driver0_0_waddr <= unsigned'(candado_core0_0_state_code & to_unsigned(3, 2));
-    end case;
-end process display_driver0_0_addr_logic;
+
+display_driver0_0_cidx <= (7 - display_driver0_0_pos);
+
+
+display_driver0_0_waddr <= unsigned'(candado_core0_0_state_code & display_driver0_0_cidx);
 
 display_driver0_0_word_rom_logic: process (display_driver0_0_waddr) is
 begin
     case to_integer(display_driver0_0_waddr) is
-        when 0 => display_driver0_0_wchar <= "00101";
-        when 1 => display_driver0_0_wchar <= "00110";
-        when 2 => display_driver0_0_wchar <= "00111";
-        when 3 => display_driver0_0_wchar <= "01000";
-        when 4 => display_driver0_0_wchar <= "00101";
-        when 5 => display_driver0_0_wchar <= "01001";
-        when 6 => display_driver0_0_wchar <= "01010";
-        when 7 => display_driver0_0_wchar <= "01011";
+        when 0 => display_driver0_0_wchar <= "10001";
+        when 1 => display_driver0_0_wchar <= "00000";
+        when 2 => display_driver0_0_wchar <= "01100";
+        when 3 => display_driver0_0_wchar <= "10010";
+        when 4 => display_driver0_0_wchar <= "01110";
+        when 5 => display_driver0_0_wchar <= "01101";
+        when 6 => display_driver0_0_wchar <= "10000";
+        when 7 => display_driver0_0_wchar <= "11011";
         when 8 => display_driver0_0_wchar <= "01100";
-        when 9 => display_driver0_0_wchar <= "01101";
-        when 10 => display_driver0_0_wchar <= "01000";
+        when 9 => display_driver0_0_wchar <= "10101";
+        when 10 => display_driver0_0_wchar <= "01101";
         when 11 => display_driver0_0_wchar <= "01110";
-        when 12 => display_driver0_0_wchar <= "01111";
-        when 13 => display_driver0_0_wchar <= "01010";
-        when 14 => display_driver0_0_wchar <= "01000";
-        when 15 => display_driver0_0_wchar <= "01001";
-        when 16 => display_driver0_0_wchar <= "01000";
-        when 17 => display_driver0_0_wchar <= "10001";
-        when 18 => display_driver0_0_wchar <= "10001";
-        when 19 => display_driver0_0_wchar <= "00000";
+        when 12 => display_driver0_0_wchar <= "11100";
+        when 13 => display_driver0_0_wchar <= "11101";
+        when 14 => display_driver0_0_wchar <= "11110";
+        when 15 => display_driver0_0_wchar <= "11111";
+        when 16 => display_driver0_0_wchar <= "01100";
+        when 17 => display_driver0_0_wchar <= "11000";
+        when 18 => display_driver0_0_wchar <= "01110";
+        when 19 => display_driver0_0_wchar <= "01100";
         when 20 => display_driver0_0_wchar <= "10010";
-        when 21 => display_driver0_0_wchar <= "00111";
-        when 22 => display_driver0_0_wchar <= "10010";
-        when 23 => display_driver0_0_wchar <= "10001";
-        when 24 => display_driver0_0_wchar <= "01100";
-        when 25 => display_driver0_0_wchar <= "01111";
-        when 26 => display_driver0_0_wchar <= "01001";
+        when 21 => display_driver0_0_wchar <= "10000";
+        when 22 => display_driver0_0_wchar <= "10000";
+        when 23 => display_driver0_0_wchar <= "10000";
+        when 24 => display_driver0_0_wchar <= "10011";
+        when 25 => display_driver0_0_wchar <= "10100";
+        when 26 => display_driver0_0_wchar <= "10001";
+        when 27 => display_driver0_0_wchar <= "00000";
+        when 28 => display_driver0_0_wchar <= "01100";
+        when 29 => display_driver0_0_wchar <= "10010";
+        when 30 => display_driver0_0_wchar <= "01110";
+        when 31 => display_driver0_0_wchar <= "01101";
+        when 32 => display_driver0_0_wchar <= "01110";
+        when 33 => display_driver0_0_wchar <= "10110";
+        when 34 => display_driver0_0_wchar <= "10110";
+        when 35 => display_driver0_0_wchar <= "10101";
+        when 36 => display_driver0_0_wchar <= "10110";
+        when 37 => display_driver0_0_wchar <= "10000";
+        when 38 => display_driver0_0_wchar <= "10000";
+        when 39 => display_driver0_0_wchar <= "11011";
+        when 40 => display_driver0_0_wchar <= "01010";
+        when 41 => display_driver0_0_wchar <= "10001";
+        when 42 => display_driver0_0_wchar <= "01010";
+        when 43 => display_driver0_0_wchar <= "10110";
+        when 44 => display_driver0_0_wchar <= "10100";
+        when 45 => display_driver0_0_wchar <= "10100";
+        when 46 => display_driver0_0_wchar <= "10000";
+        when 47 => display_driver0_0_wchar <= "10000";
+        when 48 => display_driver0_0_wchar <= "00101";
+        when 49 => display_driver0_0_wchar <= "01110";
+        when 50 => display_driver0_0_wchar <= "10111";
+        when 51 => display_driver0_0_wchar <= "10000";
+        when 52 => display_driver0_0_wchar <= "11100";
+        when 53 => display_driver0_0_wchar <= "11101";
+        when 54 => display_driver0_0_wchar <= "11110";
+        when 55 => display_driver0_0_wchar <= "11111";
+        when 56 => display_driver0_0_wchar <= "10000";
+        when 57 => display_driver0_0_wchar <= "10000";
+        when 58 => display_driver0_0_wchar <= "10000";
+        when 59 => display_driver0_0_wchar <= "10000";
+        when 60 => display_driver0_0_wchar <= "10000";
+        when 61 => display_driver0_0_wchar <= "10000";
+        when 62 => display_driver0_0_wchar <= "10000";
         when others => display_driver0_0_wchar <= "10000";
     end case;
 end process display_driver0_0_word_rom_logic;
 
-display_driver0_0_glyph_select: process (candado_core0_0_attempts_left, display_driver0_0_pos, display_driver0_0_wchar) is
+
+display_driver0_0_slot <= display_driver0_0_wchar(2-1 downto 0);
+
+display_driver0_0_nibble_logic: process (candado_core0_0_seq, display_driver0_0_slot) is
 begin
-    if (display_driver0_0_pos >= 4) then
-        display_driver0_0_gidx <= display_driver0_0_wchar;
-    elsif (display_driver0_0_pos = 0) then
-        display_driver0_0_gidx <= (1 + resize(candado_core0_0_attempts_left, 5));
+    case display_driver0_0_slot is
+        when "00" =>
+            display_driver0_0_nibble <= candado_core0_0_seq(16-1 downto 12);
+        when "01" =>
+            display_driver0_0_nibble <= candado_core0_0_seq(12-1 downto 8);
+        when "10" =>
+            display_driver0_0_nibble <= candado_core0_0_seq(8-1 downto 4);
+        when others =>
+            display_driver0_0_nibble <= candado_core0_0_seq(4-1 downto 0);
+    end case;
+end process display_driver0_0_nibble_logic;
+
+display_driver0_0_glyph_select: process (candado_core0_0_attempts_left, candado_core0_0_count, candado_core0_0_state_code, display_driver0_0_nibble, display_driver0_0_slot, display_driver0_0_wchar) is
+begin
+    if (display_driver0_0_wchar = 27) then
+        display_driver0_0_gidx <= (0 + resize(candado_core0_0_attempts_left, 5));
+    elsif (display_driver0_0_wchar >= 28) then
+        if (candado_core0_0_count > display_driver0_0_slot) then
+            if (candado_core0_0_state_code = 6) then
+                display_driver0_0_gidx <= (0 + resize(display_driver0_0_nibble, 5));
+            else
+                display_driver0_0_gidx <= to_unsigned(25, 5);
+            end if;
+        else
+            display_driver0_0_gidx <= to_unsigned(26, 5);
+        end if;
     else
-        display_driver0_0_gidx <= to_unsigned(0, 5);
+        display_driver0_0_gidx <= display_driver0_0_wchar;
     end if;
 end process display_driver0_0_glyph_select;
 
 display_driver0_0_glyph_rom_logic: process (display_driver0_0_gidx) is
 begin
     case to_integer(display_driver0_0_gidx) is
-        when 0 => display_driver0_0_gpat <= "0000000";
-        when 1 => display_driver0_0_gpat <= "1111110";
-        when 2 => display_driver0_0_gpat <= "0110000";
-        when 3 => display_driver0_0_gpat <= "1101101";
-        when 4 => display_driver0_0_gpat <= "1111001";
-        when 5 => display_driver0_0_gpat <= "0000110";
-        when 6 => display_driver0_0_gpat <= "0111101";
-        when 7 => display_driver0_0_gpat <= "0001110";
-        when 8 => display_driver0_0_gpat <= "1001111";
-        when 9 => display_driver0_0_gpat <= "0010101";
-        when 10 => display_driver0_0_gpat <= "1100111";
-        when 11 => display_driver0_0_gpat <= "0001111";
+        when 0 => display_driver0_0_gpat <= "1111110";
+        when 1 => display_driver0_0_gpat <= "0110000";
+        when 2 => display_driver0_0_gpat <= "1101101";
+        when 3 => display_driver0_0_gpat <= "1111001";
+        when 4 => display_driver0_0_gpat <= "0110011";
+        when 5 => display_driver0_0_gpat <= "1011011";
+        when 6 => display_driver0_0_gpat <= "1011111";
+        when 7 => display_driver0_0_gpat <= "1110000";
+        when 8 => display_driver0_0_gpat <= "1111111";
+        when 9 => display_driver0_0_gpat <= "1111011";
+        when 10 => display_driver0_0_gpat <= "1110111";
+        when 11 => display_driver0_0_gpat <= "0011111";
         when 12 => display_driver0_0_gpat <= "1001110";
-        when 13 => display_driver0_0_gpat <= "0110111";
-        when 14 => display_driver0_0_gpat <= "0001101";
-        when 15 => display_driver0_0_gpat <= "1111110";
-        when 16 => display_driver0_0_gpat <= "1000111";
-        when 17 => display_driver0_0_gpat <= "0000101";
-        when 18 => display_driver0_0_gpat <= "1110111";
-        when 19 => display_driver0_0_gpat <= "0000000";
-        when 20 => display_driver0_0_gpat <= "0000000";
-        when 21 => display_driver0_0_gpat <= "0000000";
-        when 22 => display_driver0_0_gpat <= "0000000";
-        when 23 => display_driver0_0_gpat <= "0000000";
-        when 24 => display_driver0_0_gpat <= "0000000";
-        when 25 => display_driver0_0_gpat <= "0000000";
-        when 26 => display_driver0_0_gpat <= "0000000";
+        when 13 => display_driver0_0_gpat <= "0111101";
+        when 14 => display_driver0_0_gpat <= "1001111";
+        when 15 => display_driver0_0_gpat <= "1000111";
+        when 16 => display_driver0_0_gpat <= "0000000";
+        when 17 => display_driver0_0_gpat <= "0001110";
+        when 18 => display_driver0_0_gpat <= "1010111";
+        when 19 => display_driver0_0_gpat <= "0111110";
+        when 20 => display_driver0_0_gpat <= "0010101";
+        when 21 => display_driver0_0_gpat <= "0011101";
+        when 22 => display_driver0_0_gpat <= "0000101";
+        when 23 => display_driver0_0_gpat <= "0001111";
+        when 24 => display_driver0_0_gpat <= "0110111";
+        when 25 => display_driver0_0_gpat <= "0000001";
+        when 26 => display_driver0_0_gpat <= "0001000";
         when 27 => display_driver0_0_gpat <= "0000000";
         when 28 => display_driver0_0_gpat <= "0000000";
         when 29 => display_driver0_0_gpat <= "0000000";
@@ -594,7 +754,11 @@ end process display_driver0_0_an_decode;
 display_driver0_0_out_reg: process (CLK100MHZ) is
 begin
     if rising_edge(CLK100MHZ) then
-        seg_raw <= display_driver0_0_gpat;
+        if ((candado_core0_0_state_code = 5) and (not bool(alarm_outputs0_0_blink))) then
+            seg_raw <= to_unsigned(0, 7);
+        else
+            seg_raw <= display_driver0_0_gpat;
+        end if;
         an_raw <= display_driver0_0_an_sel;
     end if;
 end process display_driver0_0_out_reg;
@@ -620,20 +784,20 @@ end process status_outputs0_0_pwm;
 status_outputs0_0_rgb_rom: process (candado_core0_0_state_code) is
 begin
     case to_integer(candado_core0_0_state_code) is
-        when 0 => status_outputs0_0_rgb_raw <= "001";
+        when 0 => status_outputs0_0_rgb_raw <= "100";
         when 1 => status_outputs0_0_rgb_raw <= "011";
-        when 2 => status_outputs0_0_rgb_raw <= "111";
+        when 2 => status_outputs0_0_rgb_raw <= "001";
         when 3 => status_outputs0_0_rgb_raw <= "010";
-        when 4 => status_outputs0_0_rgb_raw <= "100";
+        when 4 => status_outputs0_0_rgb_raw <= "110";
         when 5 => status_outputs0_0_rgb_raw <= "101";
-        when others => status_outputs0_0_rgb_raw <= "110";
+        when others => status_outputs0_0_rgb_raw <= "111";
     end case;
 end process status_outputs0_0_rgb_rom;
 
 status_outputs0_0_rgb_out: process (CLK100MHZ) is
 begin
     if rising_edge(CLK100MHZ) then
-        if (status_outputs0_0_pwm_cnt(4-1 downto (4 - 4)) = 0) then
+        if ((status_outputs0_0_pwm_cnt(4-1 downto (4 - 4)) = 0) and (bool(alarm_outputs0_0_blink) or (not bool(status_outputs0_0_f_alarm)))) then
             rgb <= status_outputs0_0_rgb_raw;
         else
             rgb <= to_unsigned(0, 3);
@@ -657,14 +821,43 @@ begin
     end case;
 end process status_outputs0_0_thermometer;
 
+status_outputs0_0_attempts_bar: process (candado_core0_0_attempts_left) is
+begin
+    case candado_core0_0_attempts_left is
+        when "000" =>
+            status_outputs0_0_tries <= to_unsigned(0, 5);
+        when "001" =>
+            status_outputs0_0_tries <= to_unsigned(1, 5);
+        when "010" =>
+            status_outputs0_0_tries <= to_unsigned(3, 5);
+        when "011" =>
+            status_outputs0_0_tries <= to_unsigned(7, 5);
+        when "100" =>
+            status_outputs0_0_tries <= to_unsigned(15, 5);
+        when others =>
+            status_outputs0_0_tries <= to_unsigned(31, 5);
+    end case;
+end process status_outputs0_0_attempts_bar;
+
 
 status_outputs0_0_f_config <= stdl(candado_core0_0_state_code = 6);
 status_outputs0_0_f_unlocked <= stdl(candado_core0_0_state_code = 3);
 status_outputs0_0_f_error <= stdl(candado_core0_0_state_code = 4);
 status_outputs0_0_f_alarm <= stdl(candado_core0_0_state_code = 5);
+status_outputs0_0_f_locked <= stdl((candado_core0_0_state_code /= 3) and (candado_core0_0_state_code /= 6));
 
-
-LED_num <= unsigned'(status_outputs0_0_f_alarm & status_outputs0_0_f_error & status_outputs0_0_f_unlocked & status_outputs0_0_f_config & to_unsigned(0, 8) & status_outputs0_0_therm);
+status_outputs0_0_led_logic: process (alarm_outputs0_0_blink, status_outputs0_0_f_alarm, status_outputs0_0_f_config, status_outputs0_0_f_error, status_outputs0_0_f_locked, status_outputs0_0_f_unlocked, status_outputs0_0_therm, status_outputs0_0_tries) is
+begin
+    if bool(status_outputs0_0_f_alarm) then
+        if bool(alarm_outputs0_0_blink) then
+            LED_num <= to_unsigned(65535, 16);
+        else
+            LED_num <= to_unsigned(0, 16);
+        end if;
+    else
+        LED_num <= unsigned'(status_outputs0_0_f_alarm & status_outputs0_0_f_error & status_outputs0_0_f_unlocked & status_outputs0_0_f_config & status_outputs0_0_f_locked & to_unsigned(0, 2) & status_outputs0_0_tries & status_outputs0_0_therm);
+    end if;
+end process status_outputs0_0_led_logic;
 
 
 LED16_R <= rgb(2);
@@ -721,12 +914,12 @@ end process event_logger0_0_addr_logic;
 event_logger0_0_rom_logic: process (event_logger0_0_raddr) is
 begin
     case to_integer(event_logger0_0_raddr) is
-        when 0 => event_logger0_0_rchar <= "01001001";
-        when 1 => event_logger0_0_rchar <= "01000100";
-        when 2 => event_logger0_0_rchar <= "01001100";
-        when 3 => event_logger0_0_rchar <= "01000101";
-        when 4 => event_logger0_0_rchar <= "00100000";
-        when 5 => event_logger0_0_rchar <= "00100000";
+        when 0 => event_logger0_0_rchar <= "01001100";
+        when 1 => event_logger0_0_rchar <= "01001111";
+        when 2 => event_logger0_0_rchar <= "01000011";
+        when 3 => event_logger0_0_rchar <= "01001011";
+        when 4 => event_logger0_0_rchar <= "01000101";
+        when 5 => event_logger0_0_rchar <= "01000100";
         when 6 => event_logger0_0_rchar <= "00100000";
         when 7 => event_logger0_0_rchar <= "00100000";
         when 8 => event_logger0_0_rchar <= "01001001";

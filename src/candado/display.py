@@ -1,7 +1,14 @@
 """Display de 7 segmentos multiplexado (8 dígitos).
 
-AN7..AN4 muestran la palabra del estado ("IdLE", "InPt", "OPEn", "Err",
-"ALAr", "COnF"...) y AN0 muestra los intentos restantes (0..3).
+Cada estado tiene un texto de 8 caracteres (``STATE_WORDS``) que ocupa todo el
+display, AN7 = primer carácter:
+
+    LOCKED    "LOCKEd 5"   (a la derecha, intentos restantes)
+    INPUT     "CodE--__"   (un '-' por dígito ingresado; el valor no se muestra)
+    UNLOCKED  "UnLOCKEd"
+    ERROR     "Error  4"   (intentos restantes)
+    ALARM     "ALArnn"     (parpadea)
+    CONFIG    "SEt 12__"   (el código nuevo sí se muestra para poder revisarlo)
 
 La salida ``seg`` (abcdefg) y ``an`` (un bit por dígito) son de lógica
 POSITIVA (1 = encendido); la inversión para la placa se hace en el top.
@@ -10,19 +17,28 @@ POSITIVA (1 = encendido); la inversión para la placa se hace en el top.
 from myhdl import (Signal, always, always_comb, block, concat, instances,
                    intbv, modbv)
 
-from .glyphs import G_BLANK, G_DIGIT0, GLYPH_ROM, word_to_indices
-from .states import STATE_WORDS
+from .glyphs import (C_ATTEMPTS, C_SLOT0, G_DASH, G_HEX0, G_UNDER, GLYPH_ROM,
+                     word_to_indices)
+from .states import S_ALARM, S_CONFIG, STATE_WORDS
 
-WORD_ROM = tuple(i for word in STATE_WORDS for i in word_to_indices(word.ljust(4, "_")))
+# ROM de texto: dirección = {state_code, carácter 0..7}; 8 entradas por estado
+# (el código de estado 7 no se usa y queda apagado).
+WORD_ROM = tuple(
+    i for word in STATE_WORDS + (" " * 8,) for i in word_to_indices(word.ljust(8))
+)
 
 
 @block
-def display_driver(clk, state_code, attempts_left, seg, an, SCAN_BITS):
+def display_driver(clk, state_code, attempts_left, count, seq, blink, seg, an,
+                   SCAN_BITS):
     W = SCAN_BITS + 3
     cnt = Signal(modbv(0)[W:])
     pos = Signal(intbv(0)[3:])
-    waddr = Signal(intbv(0)[5:])
+    cidx = Signal(intbv(0)[3:])
+    waddr = Signal(intbv(0)[6:])
     wchar = Signal(intbv(0)[5:])
+    slot = Signal(intbv(0)[2:])
+    nibble = Signal(intbv(0)[4:])
     gidx = Signal(intbv(0)[5:])
     gpat = Signal(intbv(0)[7:])
     an_sel = Signal(intbv(0)[8:])
@@ -35,32 +51,52 @@ def display_driver(clk, state_code, attempts_left, seg, an, SCAN_BITS):
     def pos_logic():
         pos.next = cnt[W:W - 3]
 
-    # Dirección de la ROM = {state_code, posición del carácter}. Se arma con
-    # concat() y no con state_code*4 + k: en VHDL (numeric_std) el producto
-    # unsigned*natural conserva el ancho del operando izquierdo y se truncaría.
+    # pos = 7 es el dígito de la izquierda (AN7) = carácter 0 del texto.
+    @always_comb
+    def char_index():
+        cidx.next = 7 - pos
+
+    # Dirección de la ROM = {state_code, carácter}. Se arma con concat() y no
+    # con state_code*8 + k: en VHDL (numeric_std) el producto unsigned*natural
+    # conserva el ancho del operando izquierdo y se truncaría.
     @always_comb
     def addr_logic():
-        if pos == 7:
-            waddr.next = concat(state_code, intbv(0)[2:])
-        elif pos == 6:
-            waddr.next = concat(state_code, intbv(1)[2:])
-        elif pos == 5:
-            waddr.next = concat(state_code, intbv(2)[2:])
-        else:
-            waddr.next = concat(state_code, intbv(3)[2:])
+        waddr.next = concat(state_code, cidx)
 
     @always_comb
     def word_rom_logic():
         wchar.next = WORD_ROM[waddr]
 
+    # Casilla k (0..3) de los códigos especiales C_SLOT0 + k y su dígito.
+    @always_comb
+    def slot_logic():
+        slot.next = wchar[2:0]
+
+    @always_comb
+    def nibble_logic():
+        if slot == 0:
+            nibble.next = seq[16:12]
+        elif slot == 1:
+            nibble.next = seq[12:8]
+        elif slot == 2:
+            nibble.next = seq[8:4]
+        else:
+            nibble.next = seq[4:0]
+
     @always_comb
     def glyph_select():
-        if pos >= 4:
-            gidx.next = wchar
-        elif pos == 0:
-            gidx.next = G_DIGIT0 + attempts_left
+        if wchar == C_ATTEMPTS:
+            gidx.next = G_HEX0 + attempts_left
+        elif wchar >= C_SLOT0:
+            if count > slot:
+                if state_code == S_CONFIG:
+                    gidx.next = G_HEX0 + nibble
+                else:
+                    gidx.next = G_DASH
+            else:
+                gidx.next = G_UNDER
         else:
-            gidx.next = G_BLANK
+            gidx.next = wchar
 
     @always_comb
     def glyph_rom_logic():
@@ -87,7 +123,11 @@ def display_driver(clk, state_code, attempts_left, seg, an, SCAN_BITS):
 
     @always(clk.posedge)
     def out_reg():
-        seg.next = gpat
+        # En ALARM el texto parpadea (segmentos apagados en la fase baja).
+        if state_code == S_ALARM and not blink:
+            seg.next = 0
+        else:
+            seg.next = gpat
         an.next = an_sel
 
     return instances()

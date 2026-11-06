@@ -2,7 +2,7 @@
 --
 -- Aplica a candado_top_sim (VHDL convertido desde Python con tiempos
 -- reducidos) las mismas entradas que se simularon en Python y compara TODAS las
--- salidas de los pines (LED, SEG, DP, AN, LED RGB, UART) en cada ciclo contra lo
+-- salidas de los pines (LED, SEG, DP, AN, LED RGB, UART, audio) en cada ciclo contra lo
 -- que produjo el modelo Python. Los vectores vienen de tb_vectors_pkg.vhd
 -- (generado por tools/generate_vectors.py).
 --
@@ -34,6 +34,7 @@ architecture sim of tb_candado_top is
   signal AN           : std_logic_vector(7 downto 0);
   signal LED16_R, LED16_G, LED16_B : std_logic;
   signal UART_RXD_OUT : std_logic;
+  signal AUD_PWM, AUD_SD, BUZZER : std_logic;
 
   function to_hex(v : std_logic_vector) return string is
     variable r      : string(1 to (v'length + 3) / 4);
@@ -77,7 +78,10 @@ begin
       LED16_R      => LED16_R,
       LED16_G      => LED16_G,
       LED16_B      => LED16_B,
-      UART_RXD_OUT => UART_RXD_OUT);
+      UART_RXD_OUT => UART_RXD_OUT,
+      AUD_PWM      => AUD_PWM,
+      AUD_SD       => AUD_SD,
+      BUZZER       => BUZZER);
 
   driver_checker : process
     variable ii, oi, si : natural := 0;
@@ -115,7 +119,8 @@ begin
         expected := OUT_EVENTS(oi).val;
         oi := oi + 1;
       end loop;
-      actual := LED & SEG & DP & AN & LED16_R & LED16_G & LED16_B & UART_RXD_OUT;
+      actual := LED & SEG & DP & AN & LED16_R & LED16_G & LED16_B & UART_RXD_OUT
+                & AUD_PWM & AUD_SD & BUZZER;
       if actual /= expected then
         errors := errors + 1;
         if errors <= MAX_REPORTED then

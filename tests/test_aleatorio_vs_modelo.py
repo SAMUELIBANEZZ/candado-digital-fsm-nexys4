@@ -30,11 +30,11 @@ def test_los_aleatorios_visitan_todos_los_estados_y_transiciones():
         p = t.path()
         vistos |= set(p)
         trans |= set(zip(p, p[1:]))
-    assert vistos == {"IDLE", "INPUT", "VALIDATE", "UNLOCKED", "ERROR", "ALARM", "CONFIG"}
-    for par in [("IDLE", "INPUT"), ("INPUT", "VALIDATE"), ("VALIDATE", "UNLOCKED"),
-                ("VALIDATE", "ERROR"), ("ERROR", "INPUT"), ("ERROR", "ALARM"),
-                ("UNLOCKED", "IDLE"), ("ALARM", "IDLE"), ("UNLOCKED", "CONFIG"),
-                ("CONFIG", "UNLOCKED"), ("CONFIG", "IDLE"), ("INPUT", "IDLE")]:
+    assert vistos == {"LOCKED", "INPUT", "VALIDATE", "UNLOCKED", "ERROR", "ALARM", "CONFIG"}
+    for par in [("LOCKED", "INPUT"), ("INPUT", "VALIDATE"), ("VALIDATE", "UNLOCKED"),
+                ("VALIDATE", "ERROR"), ("ERROR", "LOCKED"), ("ERROR", "ALARM"),
+                ("UNLOCKED", "LOCKED"), ("ALARM", "LOCKED"), ("UNLOCKED", "CONFIG"),
+                ("CONFIG", "UNLOCKED"), ("CONFIG", "LOCKED"), ("INPUT", "LOCKED")]:
         assert par in trans, f"transición sin cubrir en aleatorios: {par}"
 
 
@@ -50,13 +50,15 @@ def test_el_modelo_de_referencia_cumple_la_tabla_iii_por_si_solo():
     code(0x1234)
     assert m.snapshot()[0] == "UNLOCKED"
     m.advance(p.unlocked_ticks * p.tick_cycles)
-    assert m.state == "IDLE"
-    for i in range(3):
+    assert m.state == "LOCKED"
+    for i in range(p.max_attempts):
         code(0x1111)
         assert m.state == "ERROR" and m.fail == i + 1
         m.advance(p.error_ticks * p.tick_cycles)
+        m.press({"BTNR"})                    # BTNR no devuelve intentos
     assert m.state == "ALARM"
     m.press({"BTNC"}, 1)
-    assert m.state == "ALARM" and m.count == 0
     m.press({"BTNR"})
-    assert m.snapshot() == ("IDLE", 0, 0, p.default_code)
+    assert m.state == "ALARM" and m.count == 0
+    m.advance(p.alarm_ticks * p.tick_cycles)
+    assert m.snapshot() == ("LOCKED", 0, 0, p.default_code)

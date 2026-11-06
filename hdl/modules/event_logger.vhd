@@ -14,7 +14,7 @@ entity event_logger is
         clk: in std_logic;
         rst: in std_logic;
         state_code: in std_logic_vector(2 downto 0);
-        fail: in std_logic_vector(1 downto 0);
+        fail: in std_logic_vector(2 downto 0);
         txd: out std_logic
     );
 end entity event_logger;
@@ -25,7 +25,7 @@ architecture MyHDL of event_logger is
 
 
 signal state_code_num: unsigned(2 downto 0) := to_unsigned(0, 3);
-signal fail_num: unsigned(1 downto 0) := to_unsigned(0, 2);
+signal fail_num: unsigned(2 downto 0) := to_unsigned(0, 3);
 signal tbusy: std_logic := '0';
 signal tdata: unsigned(7 downto 0) := to_unsigned(0, 8);
 signal tstart: std_logic := '0';
@@ -33,7 +33,7 @@ signal idx: unsigned(3 downto 0) := to_unsigned(0, 4);
 signal raddr: unsigned(5 downto 0) := to_unsigned(0, 6);
 signal msg_state: unsigned(2 downto 0) := to_unsigned(0, 3);
 signal rchar: unsigned(7 downto 0) := to_unsigned(0, 8);
-signal msg_fail: unsigned(1 downto 0) := to_unsigned(0, 2);
+signal msg_fail: unsigned(2 downto 0) := to_unsigned(0, 3);
 signal prev: unsigned(2 downto 0) := to_unsigned(0, 3);
 signal phase: unsigned(1 downto 0) := to_unsigned(0, 2);
 signal pending: std_logic := '0';
@@ -100,12 +100,12 @@ end process addr_logic;
 rom_logic: process (raddr) is
 begin
     case to_integer(raddr) is
-        when 0 => rchar <= "01001001";
-        when 1 => rchar <= "01000100";
-        when 2 => rchar <= "01001100";
-        when 3 => rchar <= "01000101";
-        when 4 => rchar <= "00100000";
-        when 5 => rchar <= "00100000";
+        when 0 => rchar <= "01001100";
+        when 1 => rchar <= "01001111";
+        when 2 => rchar <= "01000011";
+        when 3 => rchar <= "01001011";
+        when 4 => rchar <= "01000101";
+        when 5 => rchar <= "01000100";
         when 6 => rchar <= "00100000";
         when 7 => rchar <= "00100000";
         when 8 => rchar <= "01001001";

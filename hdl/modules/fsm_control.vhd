@@ -16,7 +16,8 @@ entity fsm_control is
         btn_c: in std_logic;
         btn_l: in std_logic;
         btn_r: in std_logic;
-        sw_mode: in std_logic;
+        btn_u: in std_logic;
+        btn_d: in std_logic;
         count: in std_logic_vector(2 downto 0);
         match: in std_logic;
         tick: in std_logic;
@@ -26,7 +27,7 @@ entity fsm_control is
         del_en: out std_logic;
         clear_buf: out std_logic;
         code_we: out std_logic;
-        fail: out std_logic_vector(1 downto 0)
+        fail: out std_logic_vector(2 downto 0)
     );
 end entity fsm_control;
 
@@ -35,7 +36,7 @@ architecture MyHDL of fsm_control is
 
 
 type t_enum_t_state_1 is (
-	IDLE,
+	LOCKED,
 	INPUT,
 	VALIDATE,
 	UNLOCKED,
@@ -46,10 +47,10 @@ type t_enum_t_state_1 is (
 
 signal count_num: unsigned(2 downto 0) := to_unsigned(0, 3);
 signal state_code_num: unsigned(2 downto 0) := to_unsigned(0, 3);
-signal fail_num: unsigned(1 downto 0) := to_unsigned(0, 2);
-signal fail_r: unsigned(1 downto 0) := to_unsigned(0, 2);
-signal next_state: t_enum_t_state_1 := IDLE;
-signal state: t_enum_t_state_1 := IDLE;
+signal fail_num: unsigned(2 downto 0) := to_unsigned(0, 3);
+signal fail_r: unsigned(2 downto 0) := to_unsigned(0, 3);
+signal next_state: t_enum_t_state_1 := LOCKED;
+signal state: t_enum_t_state_1 := LOCKED;
 signal tcount: unsigned(8 downto 0) := to_unsigned(0, 9);
 signal timeout: std_logic := '0';
 
@@ -65,9 +66,9 @@ seq: process (clk) is
 begin
     if rising_edge(clk) then
         if bool(rst) then
-            state <= IDLE;
+            state <= LOCKED;
             tcount <= to_unsigned(0, 9);
-            fail_r <= to_unsigned(0, 2);
+            fail_r <= to_unsigned(0, 3);
         else
             state <= next_state;
             if (next_state /= state) then
@@ -75,16 +76,14 @@ begin
             elsif (bool(tick) and (tcount < 300)) then
                 tcount <= (tcount + 1);
             end if;
-            if bool(btn_r) then
-                fail_r <= to_unsigned(0, 2);
-            elsif (state = VALIDATE) then
+            if (state = VALIDATE) then
                 if bool(match) then
-                    fail_r <= to_unsigned(0, 2);
-                elsif (fail_r < 3) then
+                    fail_r <= to_unsigned(0, 3);
+                elsif (fail_r < 5) then
                     fail_r <= (fail_r + 1);
                 end if;
-            elsif ((state = ALARM) and (next_state = IDLE)) then
-                fail_r <= to_unsigned(0, 2);
+            elsif ((state = ALARM) and (next_state = LOCKED)) then
+                fail_r <= to_unsigned(0, 3);
             end if;
         end if;
     end if;
@@ -112,17 +111,21 @@ begin
     end if;
 end process timeout_logic;
 
-comb: process (btn_c, btn_l, btn_r, count_num, fail_r, match, state, sw_mode, timeout) is
+comb: process (btn_c, btn_d, btn_l, btn_r, btn_u, count_num, fail_r, match, state, timeout) is
 begin
     next_state <= state;
     push_en <= '0';
     del_en <= '0';
     clear_buf <= '0';
     code_we <= '0';
-    if bool(btn_r) then
-        next_state <= IDLE;
+    if (state = ALARM) then
+        if bool(timeout) then
+            next_state <= LOCKED;
+        end if;
+    elsif bool(btn_r) then
+        next_state <= LOCKED;
         clear_buf <= '1';
-    elsif (state = IDLE) then
+    elsif (state = LOCKED) then
         if (bool(btn_c) and (not bool(btn_l))) then
             push_en <= '1';
             next_state <= INPUT;
@@ -134,8 +137,8 @@ begin
             if (count_num > 0) then
                 del_en <= '1';
             end if;
-            if (count_num = 1) then
-                next_state <= IDLE;
+            if (count_num <= 1) then
+                next_state <= LOCKED;
             end if;
         elsif bool(btn_c) then
             push_en <= '1';
@@ -148,27 +151,22 @@ begin
             next_state <= ERROR;
         end if;
     elsif (state = UNLOCKED) then
-        if bool(timeout) then
-            next_state <= IDLE;
-        elsif (bool(btn_c) and bool(sw_mode) and (not bool(btn_l))) then
-            push_en <= '1';
+        if (bool(timeout) or bool(btn_d)) then
+            next_state <= LOCKED;
+        elsif bool(btn_u) then
             next_state <= CONFIG;
         end if;
     elsif (state = ERROR) then
         if bool(timeout) then
-            if (fail_r >= 3) then
+            if (fail_r >= 5) then
                 next_state <= ALARM;
             else
-                next_state <= INPUT;
+                next_state <= LOCKED;
             end if;
-        end if;
-    elsif (state = ALARM) then
-        if bool(timeout) then
-            next_state <= IDLE;
         end if;
     elsif (state = CONFIG) then
         if bool(timeout) then
-            next_state <= IDLE;
+            next_state <= LOCKED;
             clear_buf <= '1';
         elsif (count_num = 4) then
             code_we <= '1';
@@ -190,7 +188,7 @@ clear_timer <= stdl(next_state /= state);
 outputs: process (state) is
 begin
     case state is
-        when IDLE =>
+        when LOCKED =>
             state_code_num <= to_unsigned(0, 3);
         when INPUT =>
             state_code_num <= to_unsigned(1, 3);

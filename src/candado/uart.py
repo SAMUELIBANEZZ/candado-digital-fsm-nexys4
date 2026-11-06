@@ -68,7 +68,7 @@ def event_logger(clk, rst, state_code, fail, txd, BAUD_CYCLES):
     pending = Signal(False)
     pend_state = Signal(intbv(0)[3:])
     msg_state = Signal(intbv(0)[3:])
-    msg_fail = Signal(intbv(0)[2:])
+    msg_fail = Signal(intbv(0)[3:])
     idx = Signal(intbv(0)[4:])
     phase = Signal(intbv(0)[2:])
     raddr = Signal(intbv(0)[6:])

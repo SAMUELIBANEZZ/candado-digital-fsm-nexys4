@@ -16,29 +16,31 @@ entity candado_core is
         btnc: in std_logic;
         btnl: in std_logic;
         btnr: in std_logic;
+        btnu: in std_logic;
+        btnd: in std_logic;
         sw_digit: in std_logic_vector(3 downto 0);
-        sw_mode: in std_logic;
         state_code: out std_logic_vector(2 downto 0);
         count: out std_logic_vector(2 downto 0);
-        fail: out std_logic_vector(1 downto 0);
-        attempts_left: out std_logic_vector(1 downto 0);
-        code: out std_logic_vector(15 downto 0)
+        fail: out std_logic_vector(2 downto 0);
+        attempts_left: out std_logic_vector(2 downto 0);
+        code: out std_logic_vector(15 downto 0);
+        seq: out std_logic_vector(15 downto 0)
     );
 end entity candado_core;
 -- Núcleo funcional.
 -- 
 -- Entradas  : ``rst`` (reset duro ya sincronizado, activo en alto), botones
---             crudos ``btnc/btnl/btnr``, ``sw_digit`` (SW3..SW0) y
---             ``sw_mode`` (SW15).
+--             crudos ``btnc/btnl/btnr/btnu/btnd`` y ``sw_digit`` (SW3..SW0).
 -- Salidas   : ``state_code``, ``count`` (dígitos ingresados), ``fail``
---             (intentos fallidos), ``attempts_left`` y ``code`` (código
---             vigente; sólo para observación y pruebas).
+--             (intentos fallidos), ``attempts_left``, ``code`` (código
+--             vigente; sólo para observación y pruebas) y ``seq`` (dígitos
+--             ingresados, para el display en CONFIG).
 
 architecture MyHDL of candado_core is
 
 
 type t_enum_t_state_1 is (
-	IDLE,
+	LOCKED,
 	INPUT,
 	VALIDATE,
 	UNLOCKED,
@@ -50,19 +52,22 @@ type t_enum_t_state_1 is (
 signal sw_digit_num: unsigned(3 downto 0) := to_unsigned(0, 4);
 signal state_code_num: unsigned(2 downto 0) := to_unsigned(0, 3);
 signal count_num: unsigned(2 downto 0) := to_unsigned(0, 3);
-signal fail_num: unsigned(1 downto 0) := to_unsigned(0, 2);
-signal attempts_left_num: unsigned(1 downto 0) := to_unsigned(0, 2);
+signal fail_num: unsigned(2 downto 0) := to_unsigned(0, 3);
+signal attempts_left_num: unsigned(2 downto 0) := to_unsigned(0, 3);
 signal code_num: unsigned(15 downto 0) := to_unsigned(4660, 16);
+signal seq_num: unsigned(15 downto 0) := to_unsigned(0, 16);
 signal c_level: std_logic := '0';
 signal c_pulse: std_logic := '0';
 signal l_level: std_logic := '0';
 signal l_pulse: std_logic := '0';
 signal r_level: std_logic := '0';
 signal r_pulse: std_logic := '0';
-signal sw_s1: unsigned(4 downto 0) := to_unsigned(0, 5);
-signal sw_s2: unsigned(4 downto 0) := to_unsigned(0, 5);
+signal u_level: std_logic := '0';
+signal u_pulse: std_logic := '0';
+signal d_level: std_logic := '0';
+signal d_pulse: std_logic := '0';
+signal sw_s1: unsigned(3 downto 0) := to_unsigned(0, 4);
 signal digit: unsigned(3 downto 0) := to_unsigned(0, 4);
-signal mode: std_logic := '0';
 signal debouncer1_0_1_s2: std_logic := '0';
 signal debouncer1_0_1_stable: std_logic := '0';
 signal debouncer1_0_1_cnt: unsigned(20 downto 0) := to_unsigned(0, 21);
@@ -78,13 +83,22 @@ signal debouncer3_0_1_stable: std_logic := '0';
 signal debouncer3_0_1_cnt: unsigned(20 downto 0) := to_unsigned(0, 21);
 signal debouncer3_0_1_prev: std_logic := '0';
 signal debouncer3_0_1_synchronizer4_0_1_s1: std_logic := '0';
+signal debouncer4_0_1_s2: std_logic := '0';
+signal debouncer4_0_1_stable: std_logic := '0';
+signal debouncer4_0_1_cnt: unsigned(20 downto 0) := to_unsigned(0, 21);
+signal debouncer4_0_1_prev: std_logic := '0';
+signal debouncer4_0_1_synchronizer5_0_1_s1: std_logic := '0';
+signal debouncer5_0_1_s2: std_logic := '0';
+signal debouncer5_0_1_stable: std_logic := '0';
+signal debouncer5_0_1_cnt: unsigned(20 downto 0) := to_unsigned(0, 21);
+signal debouncer5_0_1_prev: std_logic := '0';
+signal debouncer5_0_1_synchronizer6_0_1_s1: std_logic := '0';
 signal tick_timer1_0_1_clear: std_logic := '0';
 signal tick_timer1_0_1_tick: std_logic := '0';
 signal tick_timer1_0_1_cnt: unsigned(23 downto 0) := to_unsigned(0, 24);
 signal digit_buffer1_0_1_clear: std_logic := '0';
 signal digit_buffer1_0_1_push: std_logic := '0';
 signal digit_buffer1_0_1_delete: std_logic := '0';
-signal digit_buffer1_0_1_seq: unsigned(15 downto 0) := to_unsigned(0, 16);
 signal digit_buffer1_0_1_cnt: unsigned(2 downto 0) := to_unsigned(0, 3);
 signal digit_buffer1_0_1_d0: unsigned(3 downto 0) := to_unsigned(0, 4);
 signal digit_buffer1_0_1_d1: unsigned(3 downto 0) := to_unsigned(0, 4);
@@ -92,9 +106,9 @@ signal digit_buffer1_0_1_d2: unsigned(3 downto 0) := to_unsigned(0, 4);
 signal digit_buffer1_0_1_d3: unsigned(3 downto 0) := to_unsigned(0, 4);
 signal code_register1_0_1_we: std_logic := '0';
 signal code_comparator1_0_1_match: std_logic := '0';
-signal fsm_control1_0_1_fail_r: unsigned(1 downto 0) := to_unsigned(0, 2);
-signal fsm_control1_0_1_next_state: t_enum_t_state_1 := IDLE;
-signal fsm_control1_0_1_state: t_enum_t_state_1 := IDLE;
+signal fsm_control1_0_1_fail_r: unsigned(2 downto 0) := to_unsigned(0, 3);
+signal fsm_control1_0_1_next_state: t_enum_t_state_1 := LOCKED;
+signal fsm_control1_0_1_state: t_enum_t_state_1 := LOCKED;
 signal fsm_control1_0_1_tcount: unsigned(8 downto 0) := to_unsigned(0, 9);
 signal fsm_control1_0_1_timeout: std_logic := '0';
 
@@ -106,6 +120,7 @@ count <= std_logic_vector(count_num);
 fail <= std_logic_vector(fail_num);
 attempts_left <= std_logic_vector(attempts_left_num);
 code <= std_logic_vector(code_num);
+seq <= std_logic_vector(seq_num);
 
 
 
@@ -190,17 +205,67 @@ end process debouncer3_0_1_seq;
 r_level <= debouncer3_0_1_stable;
 r_pulse <= stdl(bool(debouncer3_0_1_stable) and (not bool(debouncer3_0_1_prev)));
 
+debouncer4_0_1_synchronizer5_0_1_seq: process (clk) is
+begin
+    if rising_edge(clk) then
+        debouncer4_0_1_synchronizer5_0_1_s1 <= btnu;
+        debouncer4_0_1_s2 <= debouncer4_0_1_synchronizer5_0_1_s1;
+    end if;
+end process debouncer4_0_1_synchronizer5_0_1_seq;
+
+debouncer4_0_1_seq: process (clk) is
+begin
+    if rising_edge(clk) then
+        if (debouncer4_0_1_s2 = debouncer4_0_1_stable) then
+            debouncer4_0_1_cnt <= to_unsigned(0, 21);
+        elsif (signed(resize(debouncer4_0_1_cnt, 22)) = (1500000 - 1)) then
+            debouncer4_0_1_cnt <= to_unsigned(0, 21);
+            debouncer4_0_1_stable <= debouncer4_0_1_s2;
+        else
+            debouncer4_0_1_cnt <= (debouncer4_0_1_cnt + 1);
+        end if;
+        debouncer4_0_1_prev <= debouncer4_0_1_stable;
+    end if;
+end process debouncer4_0_1_seq;
+
+
+u_level <= debouncer4_0_1_stable;
+u_pulse <= stdl(bool(debouncer4_0_1_stable) and (not bool(debouncer4_0_1_prev)));
+
+debouncer5_0_1_synchronizer6_0_1_seq: process (clk) is
+begin
+    if rising_edge(clk) then
+        debouncer5_0_1_synchronizer6_0_1_s1 <= btnd;
+        debouncer5_0_1_s2 <= debouncer5_0_1_synchronizer6_0_1_s1;
+    end if;
+end process debouncer5_0_1_synchronizer6_0_1_seq;
+
+debouncer5_0_1_seq: process (clk) is
+begin
+    if rising_edge(clk) then
+        if (debouncer5_0_1_s2 = debouncer5_0_1_stable) then
+            debouncer5_0_1_cnt <= to_unsigned(0, 21);
+        elsif (signed(resize(debouncer5_0_1_cnt, 22)) = (1500000 - 1)) then
+            debouncer5_0_1_cnt <= to_unsigned(0, 21);
+            debouncer5_0_1_stable <= debouncer5_0_1_s2;
+        else
+            debouncer5_0_1_cnt <= (debouncer5_0_1_cnt + 1);
+        end if;
+        debouncer5_0_1_prev <= debouncer5_0_1_stable;
+    end if;
+end process debouncer5_0_1_seq;
+
+
+d_level <= debouncer5_0_1_stable;
+d_pulse <= stdl(bool(debouncer5_0_1_stable) and (not bool(debouncer5_0_1_prev)));
+
 sw_sync: process (clk) is
 begin
     if rising_edge(clk) then
-        sw_s1 <= unsigned'(sw_mode & sw_digit_num);
-        sw_s2 <= sw_s1;
+        sw_s1 <= sw_digit_num;
+        digit <= sw_s1;
     end if;
 end process sw_sync;
-
-
-digit <= sw_s2(4-1 downto 0);
-mode <= sw_s2(4);
 
 tick_timer1_0_1_seq: process (clk) is
 begin
@@ -247,7 +312,7 @@ end process digit_buffer1_0_1_regs;
 
 
 count_num <= digit_buffer1_0_1_cnt;
-digit_buffer1_0_1_seq <= unsigned'(digit_buffer1_0_1_d0 & digit_buffer1_0_1_d1 & digit_buffer1_0_1_d2 & digit_buffer1_0_1_d3);
+seq_num <= unsigned'(digit_buffer1_0_1_d0 & digit_buffer1_0_1_d1 & digit_buffer1_0_1_d2 & digit_buffer1_0_1_d3);
 
 code_register1_0_1_seq: process (clk) is
 begin
@@ -255,21 +320,21 @@ begin
         if bool(rst) then
             code_num <= to_unsigned(4660, 16);
         elsif bool(code_register1_0_1_we) then
-            code_num <= digit_buffer1_0_1_seq;
+            code_num <= seq_num;
         end if;
     end if;
 end process code_register1_0_1_seq;
 
 
-code_comparator1_0_1_match <= stdl(digit_buffer1_0_1_seq = code_num);
+code_comparator1_0_1_match <= stdl(seq_num = code_num);
 
 fsm_control1_0_1_seq: process (clk) is
 begin
     if rising_edge(clk) then
         if bool(rst) then
-            fsm_control1_0_1_state <= IDLE;
+            fsm_control1_0_1_state <= LOCKED;
             fsm_control1_0_1_tcount <= to_unsigned(0, 9);
-            fsm_control1_0_1_fail_r <= to_unsigned(0, 2);
+            fsm_control1_0_1_fail_r <= to_unsigned(0, 3);
         else
             fsm_control1_0_1_state <= fsm_control1_0_1_next_state;
             if (fsm_control1_0_1_next_state /= fsm_control1_0_1_state) then
@@ -277,16 +342,14 @@ begin
             elsif (bool(tick_timer1_0_1_tick) and (fsm_control1_0_1_tcount < 300)) then
                 fsm_control1_0_1_tcount <= (fsm_control1_0_1_tcount + 1);
             end if;
-            if bool(r_pulse) then
-                fsm_control1_0_1_fail_r <= to_unsigned(0, 2);
-            elsif (fsm_control1_0_1_state = VALIDATE) then
+            if (fsm_control1_0_1_state = VALIDATE) then
                 if bool(code_comparator1_0_1_match) then
-                    fsm_control1_0_1_fail_r <= to_unsigned(0, 2);
-                elsif (fsm_control1_0_1_fail_r < 3) then
+                    fsm_control1_0_1_fail_r <= to_unsigned(0, 3);
+                elsif (fsm_control1_0_1_fail_r < 5) then
                     fsm_control1_0_1_fail_r <= (fsm_control1_0_1_fail_r + 1);
                 end if;
-            elsif ((fsm_control1_0_1_state = ALARM) and (fsm_control1_0_1_next_state = IDLE)) then
-                fsm_control1_0_1_fail_r <= to_unsigned(0, 2);
+            elsif ((fsm_control1_0_1_state = ALARM) and (fsm_control1_0_1_next_state = LOCKED)) then
+                fsm_control1_0_1_fail_r <= to_unsigned(0, 3);
             end if;
         end if;
     end if;
@@ -314,17 +377,21 @@ begin
     end if;
 end process fsm_control1_0_1_timeout_logic;
 
-fsm_control1_0_1_comb: process (c_pulse, code_comparator1_0_1_match, count_num, fsm_control1_0_1_fail_r, fsm_control1_0_1_state, fsm_control1_0_1_timeout, l_pulse, mode, r_pulse) is
+fsm_control1_0_1_comb: process (c_pulse, code_comparator1_0_1_match, count_num, d_pulse, fsm_control1_0_1_fail_r, fsm_control1_0_1_state, fsm_control1_0_1_timeout, l_pulse, r_pulse, u_pulse) is
 begin
     fsm_control1_0_1_next_state <= fsm_control1_0_1_state;
     digit_buffer1_0_1_push <= '0';
     digit_buffer1_0_1_delete <= '0';
     digit_buffer1_0_1_clear <= '0';
     code_register1_0_1_we <= '0';
-    if bool(r_pulse) then
-        fsm_control1_0_1_next_state <= IDLE;
+    if (fsm_control1_0_1_state = ALARM) then
+        if bool(fsm_control1_0_1_timeout) then
+            fsm_control1_0_1_next_state <= LOCKED;
+        end if;
+    elsif bool(r_pulse) then
+        fsm_control1_0_1_next_state <= LOCKED;
         digit_buffer1_0_1_clear <= '1';
-    elsif (fsm_control1_0_1_state = IDLE) then
+    elsif (fsm_control1_0_1_state = LOCKED) then
         if (bool(c_pulse) and (not bool(l_pulse))) then
             digit_buffer1_0_1_push <= '1';
             fsm_control1_0_1_next_state <= INPUT;
@@ -336,8 +403,8 @@ begin
             if (count_num > 0) then
                 digit_buffer1_0_1_delete <= '1';
             end if;
-            if (count_num = 1) then
-                fsm_control1_0_1_next_state <= IDLE;
+            if (count_num <= 1) then
+                fsm_control1_0_1_next_state <= LOCKED;
             end if;
         elsif bool(c_pulse) then
             digit_buffer1_0_1_push <= '1';
@@ -350,27 +417,22 @@ begin
             fsm_control1_0_1_next_state <= ERROR;
         end if;
     elsif (fsm_control1_0_1_state = UNLOCKED) then
-        if bool(fsm_control1_0_1_timeout) then
-            fsm_control1_0_1_next_state <= IDLE;
-        elsif (bool(c_pulse) and bool(mode) and (not bool(l_pulse))) then
-            digit_buffer1_0_1_push <= '1';
+        if (bool(fsm_control1_0_1_timeout) or bool(d_pulse)) then
+            fsm_control1_0_1_next_state <= LOCKED;
+        elsif bool(u_pulse) then
             fsm_control1_0_1_next_state <= CONFIG;
         end if;
     elsif (fsm_control1_0_1_state = ERROR) then
         if bool(fsm_control1_0_1_timeout) then
-            if (fsm_control1_0_1_fail_r >= 3) then
+            if (fsm_control1_0_1_fail_r >= 5) then
                 fsm_control1_0_1_next_state <= ALARM;
             else
-                fsm_control1_0_1_next_state <= INPUT;
+                fsm_control1_0_1_next_state <= LOCKED;
             end if;
-        end if;
-    elsif (fsm_control1_0_1_state = ALARM) then
-        if bool(fsm_control1_0_1_timeout) then
-            fsm_control1_0_1_next_state <= IDLE;
         end if;
     elsif (fsm_control1_0_1_state = CONFIG) then
         if bool(fsm_control1_0_1_timeout) then
-            fsm_control1_0_1_next_state <= IDLE;
+            fsm_control1_0_1_next_state <= LOCKED;
             digit_buffer1_0_1_clear <= '1';
         elsif (count_num = 4) then
             code_register1_0_1_we <= '1';
@@ -392,7 +454,7 @@ tick_timer1_0_1_clear <= stdl(fsm_control1_0_1_next_state /= fsm_control1_0_1_st
 fsm_control1_0_1_outputs: process (fsm_control1_0_1_state) is
 begin
     case fsm_control1_0_1_state is
-        when IDLE =>
+        when LOCKED =>
             state_code_num <= to_unsigned(0, 3);
         when INPUT =>
             state_code_num <= to_unsigned(1, 3);
@@ -413,6 +475,6 @@ end process fsm_control1_0_1_outputs;
 fail_num <= fsm_control1_0_1_fail_r;
 
 
-attempts_left_num <= (3 - fail_num);
+attempts_left_num <= (5 - fail_num);
 
 end architecture MyHDL;
