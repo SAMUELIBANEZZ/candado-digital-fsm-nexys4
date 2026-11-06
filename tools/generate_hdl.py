@@ -22,6 +22,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
 from myhdl import Signal, ToVHDLWarning, intbv  # noqa: E402
 
+from candado.alarm import alarm_outputs  # noqa: E402
 from candado.core import candado_core  # noqa: E402
 from candado.datapath import code_comparator, code_register, digit_buffer  # noqa: E402
 from candado.display import display_driver  # noqa: E402
@@ -54,7 +55,8 @@ def convert(inst, name, path, std_logic_ports=True):
 def top_instance(p):
     return candado_top(
         Signal(False), Signal(True), v(16), b(), b(), b(), b(), b(),
-        v(16), v(7), Signal(True), v(8), b(), b(), b(), Signal(True), p=p)
+        v(16), v(7), Signal(True), v(8), b(), b(), b(), Signal(True),
+        b(), b(), b(), p=p)
 
 
 def module_instances(p):
@@ -67,20 +69,26 @@ def module_instances(p):
         ("code_register", code_register(b(), b(), b(), v(16), Signal(intbv(p.default_code)[16:]), p.default_code)),
         ("code_comparator", code_comparator(v(16), v(16), b())),
         ("fsm_control", fsm_control(
-            b(), b(), b(), b(), b(), b(), r(0, 5), b(), b(),
+            b(), b(), b(), b(), b(), b(), b(), r(0, 5), b(), b(),
             v(3), b(), b(), b(), b(), b(), r(0, p.max_attempts + 1),
             p.error_ticks, p.unlocked_ticks, p.alarm_ticks, p.config_ticks,
             p.max_attempts, p.tick_max)),
         ("display_driver", display_driver(
-            b(), v(3), r(0, p.max_attempts + 1), v(7), v(8), p.scan_bits)),
-        ("status_outputs", status_outputs(b(), v(3), r(0, 5), v(16), v(3), p.pwm_bits)),
+            b(), v(3), r(0, p.max_attempts + 1), r(0, 5), v(16), b(), v(7), v(8),
+            p.scan_bits)),
+        ("status_outputs", status_outputs(
+            b(), v(3), r(0, 5), r(0, p.max_attempts + 1), b(), v(16), v(3),
+            p.pwm_bits)),
+        ("alarm_outputs", alarm_outputs(
+            b(), v(3), b(), b(), b(), p.blink_bits, p.tone_hi_cycles,
+            p.tone_lo_cycles)),
         ("uart_tx", uart_tx(b(), b(), v(8), b(), b(), b(), p.baud_cycles)),
         ("event_logger", event_logger(
             b(), b(), v(3), r(0, p.max_attempts + 1), b(), p.baud_cycles)),
         ("candado_core", candado_core(
-            b(), b(), b(), b(), b(), v(4), b(), v(3), r(0, 5),
+            b(), b(), b(), b(), b(), b(), b(), v(4), v(3), r(0, 5),
             r(0, p.max_attempts + 1), r(0, p.max_attempts + 1),
-            Signal(intbv(p.default_code)[16:]),
+            Signal(intbv(p.default_code)[16:]), v(16),
             p.debounce_cycles, p.tick_cycles, p.error_ticks, p.unlocked_ticks,
             p.alarm_ticks, p.config_ticks, p.max_attempts, p.tick_max,
             p.default_code)),
@@ -121,7 +129,7 @@ def clean_header(path):
 
 
 def main():
-    # Avisos esperados: BTNU/BTND reservados (sin uso) y señales *_level sin lector.
+    # Avisos esperados: SW15..SW4 sin uso y señales *_level sin lector.
     warnings.simplefilter("ignore", ToVHDLWarning)
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--outdir", default="hdl")

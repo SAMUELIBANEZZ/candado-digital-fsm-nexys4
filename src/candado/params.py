@@ -30,7 +30,10 @@ class Params:
     scan_bits: int         # bits del prescaler por dígito del display
     pwm_bits: int          # bits del contador PWM del LED RGB (encendido 1/16)
     baud_cycles: int       # ciclos de reloj por bit UART
-    max_attempts: int = 3  # intentos fallidos antes de ALARM
+    blink_bits: int        # bits del contador de parpadeo (MSB = fase de parpadeo)
+    tone_hi_cycles: int    # medio periodo del tono agudo de la sirena (ciclos)
+    tone_lo_cycles: int    # medio periodo del tono grave de la sirena (ciclos)
+    max_attempts: int = 5  # intentos fallidos antes de ALARM
     default_code: int = 0x1234  # código de fábrica (4 dígitos hexadecimales)
 
     @property
@@ -50,6 +53,9 @@ HW = Params(
     scan_bits=17,                # 1,3 ms por dígito -> ~95 Hz para los 8 dígitos
     pwm_bits=8,                  # LED RGB atenuado a 1/16
     baud_cycles=868,             # 115 200 baudios
+    blink_bits=25,               # 2^24 ciclos por fase = 0,17 s -> ~3 Hz de parpadeo
+    tone_hi_cycles=50_000,       # 1 kHz
+    tone_lo_cycles=75_758,       # 660 Hz
 )
 
 # Simulación: los mismos módulos con tiempos reducidos.
@@ -63,4 +69,7 @@ SIM = Params(
     scan_bits=2,
     pwm_bits=4,
     baud_cycles=2,
+    blink_bits=6,
+    tone_hi_cycles=3,
+    tone_lo_cycles=5,
 )

@@ -52,6 +52,7 @@ def test_pines_clave_coinciden_con_el_xdc_oficial_de_digilent():
                              encoding="utf-8"))["pines"]
     cons = xdc_constraints(os.path.join(ROOT, "constraints", "candado_nexys4ddr.xdc"))
     equivalentes = {f"SEG[{6 - i}]": f"C{c}" for i, c in enumerate("ABCDEFG")}
+    equivalentes["BUZZER"] = "JA[1]"
     for port, (pin, _) in cons.items():
         ref = oficial[equivalentes.get(port, port)]["pin"]
         assert pin == ref, f"{port}: {pin} != {ref} (oficial)"
@@ -59,6 +60,8 @@ def test_pines_clave_coinciden_con_el_xdc_oficial_de_digilent():
     assert cons["CLK100MHZ"][0] == "E3" and cons["CPU_RESETN"][0] == "C12"
     assert cons["BTNC"][0] == "N17" and cons["SW[15]"][0] == "V10"
     assert cons["UART_RXD_OUT"][0] == "D4"
+    assert cons["AUD_PWM"][0] == "A11" and cons["AUD_SD"][0] == "D12"
+    assert cons["BTNU"][0] == "M18" and cons["BTND"][0] == "P18"
 
 
 def test_el_xdc_define_el_reloj_de_100_mhz():

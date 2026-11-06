@@ -14,6 +14,8 @@ entity status_outputs is
         clk: in std_logic;
         state_code: in std_logic_vector(2 downto 0);
         count: in std_logic_vector(2 downto 0);
+        attempts_left: in std_logic_vector(2 downto 0);
+        blink: in std_logic;
         led: out std_logic_vector(15 downto 0);
         rgb: out std_logic_vector(2 downto 0)
     );
@@ -26,20 +28,24 @@ architecture MyHDL of status_outputs is
 
 signal state_code_num: unsigned(2 downto 0) := to_unsigned(0, 3);
 signal count_num: unsigned(2 downto 0) := to_unsigned(0, 3);
+signal attempts_left_num: unsigned(2 downto 0) := to_unsigned(0, 3);
 signal led_num: unsigned(15 downto 0) := to_unsigned(0, 16);
 signal rgb_num: unsigned(2 downto 0) := to_unsigned(0, 3);
 signal f_alarm: std_logic := '0';
 signal f_config: std_logic := '0';
 signal f_error: std_logic := '0';
+signal f_locked: std_logic := '0';
 signal f_unlocked: std_logic := '0';
 signal pwm_cnt: unsigned(7 downto 0) := to_unsigned(0, 8);
 signal rgb_raw: unsigned(2 downto 0) := to_unsigned(0, 3);
 signal therm: unsigned(3 downto 0) := to_unsigned(0, 4);
+signal tries: unsigned(4 downto 0) := to_unsigned(0, 5);
 
 begin
 
 state_code_num <= unsigned(state_code);
 count_num <= unsigned(count);
+attempts_left_num <= unsigned(attempts_left);
 led <= std_logic_vector(led_num);
 rgb <= std_logic_vector(rgb_num);
 
@@ -55,20 +61,20 @@ end process pwm;
 rgb_rom: process (state_code_num) is
 begin
     case to_integer(state_code_num) is
-        when 0 => rgb_raw <= "001";
+        when 0 => rgb_raw <= "100";
         when 1 => rgb_raw <= "011";
-        when 2 => rgb_raw <= "111";
+        when 2 => rgb_raw <= "001";
         when 3 => rgb_raw <= "010";
-        when 4 => rgb_raw <= "100";
+        when 4 => rgb_raw <= "110";
         when 5 => rgb_raw <= "101";
-        when others => rgb_raw <= "110";
+        when others => rgb_raw <= "111";
     end case;
 end process rgb_rom;
 
 rgb_out: process (clk) is
 begin
     if rising_edge(clk) then
-        if (pwm_cnt(8-1 downto (8 - 4)) = 0) then
+        if ((pwm_cnt(8-1 downto (8 - 4)) = 0) and (bool(blink) or (not bool(f_alarm)))) then
             rgb_num <= rgb_raw;
         else
             rgb_num <= to_unsigned(0, 3);
@@ -92,13 +98,42 @@ begin
     end case;
 end process thermometer;
 
+attempts_bar: process (attempts_left_num) is
+begin
+    case attempts_left_num is
+        when "000" =>
+            tries <= to_unsigned(0, 5);
+        when "001" =>
+            tries <= to_unsigned(1, 5);
+        when "010" =>
+            tries <= to_unsigned(3, 5);
+        when "011" =>
+            tries <= to_unsigned(7, 5);
+        when "100" =>
+            tries <= to_unsigned(15, 5);
+        when others =>
+            tries <= to_unsigned(31, 5);
+    end case;
+end process attempts_bar;
+
 
 f_config <= stdl(state_code_num = 6);
 f_unlocked <= stdl(state_code_num = 3);
 f_error <= stdl(state_code_num = 4);
 f_alarm <= stdl(state_code_num = 5);
+f_locked <= stdl((state_code_num /= 3) and (state_code_num /= 6));
 
-
-led_num <= unsigned'(f_alarm & f_error & f_unlocked & f_config & to_unsigned(0, 8) & therm);
+led_logic: process (blink, f_alarm, f_config, f_error, f_locked, f_unlocked, therm, tries) is
+begin
+    if bool(f_alarm) then
+        if bool(blink) then
+            led_num <= to_unsigned(65535, 16);
+        else
+            led_num <= to_unsigned(0, 16);
+        end if;
+    else
+        led_num <= unsigned'(f_alarm & f_error & f_unlocked & f_config & f_locked & to_unsigned(0, 2) & tries & therm);
+    end if;
+end process led_logic;
 
 end architecture MyHDL;

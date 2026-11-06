@@ -13,7 +13,10 @@ entity display_driver is
     port (
         clk: in std_logic;
         state_code: in std_logic_vector(2 downto 0);
-        attempts_left: in std_logic_vector(1 downto 0);
+        attempts_left: in std_logic_vector(2 downto 0);
+        count: in std_logic_vector(2 downto 0);
+        seq: in std_logic_vector(15 downto 0);
+        blink: in std_logic;
         seg: out std_logic_vector(6 downto 0);
         an: out std_logic_vector(7 downto 0)
     );
@@ -25,21 +28,28 @@ architecture MyHDL of display_driver is
 
 
 signal state_code_num: unsigned(2 downto 0) := to_unsigned(0, 3);
-signal attempts_left_num: unsigned(1 downto 0) := to_unsigned(0, 2);
+signal attempts_left_num: unsigned(2 downto 0) := to_unsigned(0, 3);
+signal count_num: unsigned(2 downto 0) := to_unsigned(0, 3);
+signal seq_num: unsigned(15 downto 0) := to_unsigned(0, 16);
 signal seg_num: unsigned(6 downto 0) := to_unsigned(0, 7);
 signal an_num: unsigned(7 downto 0) := to_unsigned(0, 8);
 signal an_sel: unsigned(7 downto 0) := to_unsigned(0, 8);
+signal cidx: unsigned(2 downto 0) := to_unsigned(0, 3);
 signal cnt: unsigned(19 downto 0) := to_unsigned(0, 20);
 signal gidx: unsigned(4 downto 0) := to_unsigned(0, 5);
 signal gpat: unsigned(6 downto 0) := to_unsigned(0, 7);
+signal nibble: unsigned(3 downto 0) := to_unsigned(0, 4);
 signal pos: unsigned(2 downto 0) := to_unsigned(0, 3);
-signal waddr: unsigned(4 downto 0) := to_unsigned(0, 5);
+signal slot: unsigned(1 downto 0) := to_unsigned(0, 2);
+signal waddr: unsigned(5 downto 0) := to_unsigned(0, 6);
 signal wchar: unsigned(4 downto 0) := to_unsigned(0, 5);
 
 begin
 
 state_code_num <= unsigned(state_code);
 attempts_left_num <= unsigned(attempts_left);
+count_num <= unsigned(count);
+seq_num <= unsigned(seq);
 seg <= std_logic_vector(seg_num);
 an <= std_logic_vector(an_num);
 
@@ -55,95 +65,148 @@ end process scan;
 
 pos <= cnt(20-1 downto (20 - 3));
 
-addr_logic: process (pos, state_code_num) is
-begin
-    case pos is
-        when "111" =>
-            waddr <= unsigned'(state_code_num & to_unsigned(0, 2));
-        when "110" =>
-            waddr <= unsigned'(state_code_num & to_unsigned(1, 2));
-        when "101" =>
-            waddr <= unsigned'(state_code_num & to_unsigned(2, 2));
-        when others =>
-            waddr <= unsigned'(state_code_num & to_unsigned(3, 2));
-    end case;
-end process addr_logic;
+
+cidx <= (7 - pos);
+
+
+waddr <= unsigned'(state_code_num & cidx);
 
 word_rom_logic: process (waddr) is
 begin
     case to_integer(waddr) is
-        when 0 => wchar <= "00101";
-        when 1 => wchar <= "00110";
-        when 2 => wchar <= "00111";
-        when 3 => wchar <= "01000";
-        when 4 => wchar <= "00101";
-        when 5 => wchar <= "01001";
-        when 6 => wchar <= "01010";
-        when 7 => wchar <= "01011";
+        when 0 => wchar <= "10001";
+        when 1 => wchar <= "00000";
+        when 2 => wchar <= "01100";
+        when 3 => wchar <= "10010";
+        when 4 => wchar <= "01110";
+        when 5 => wchar <= "01101";
+        when 6 => wchar <= "10000";
+        when 7 => wchar <= "11011";
         when 8 => wchar <= "01100";
-        when 9 => wchar <= "01101";
-        when 10 => wchar <= "01000";
+        when 9 => wchar <= "10101";
+        when 10 => wchar <= "01101";
         when 11 => wchar <= "01110";
-        when 12 => wchar <= "01111";
-        when 13 => wchar <= "01010";
-        when 14 => wchar <= "01000";
-        when 15 => wchar <= "01001";
-        when 16 => wchar <= "01000";
-        when 17 => wchar <= "10001";
-        when 18 => wchar <= "10001";
-        when 19 => wchar <= "00000";
+        when 12 => wchar <= "11100";
+        when 13 => wchar <= "11101";
+        when 14 => wchar <= "11110";
+        when 15 => wchar <= "11111";
+        when 16 => wchar <= "01100";
+        when 17 => wchar <= "11000";
+        when 18 => wchar <= "01110";
+        when 19 => wchar <= "01100";
         when 20 => wchar <= "10010";
-        when 21 => wchar <= "00111";
-        when 22 => wchar <= "10010";
-        when 23 => wchar <= "10001";
-        when 24 => wchar <= "01100";
-        when 25 => wchar <= "01111";
-        when 26 => wchar <= "01001";
+        when 21 => wchar <= "10000";
+        when 22 => wchar <= "10000";
+        when 23 => wchar <= "10000";
+        when 24 => wchar <= "10011";
+        when 25 => wchar <= "10100";
+        when 26 => wchar <= "10001";
+        when 27 => wchar <= "00000";
+        when 28 => wchar <= "01100";
+        when 29 => wchar <= "10010";
+        when 30 => wchar <= "01110";
+        when 31 => wchar <= "01101";
+        when 32 => wchar <= "01110";
+        when 33 => wchar <= "10110";
+        when 34 => wchar <= "10110";
+        when 35 => wchar <= "10101";
+        when 36 => wchar <= "10110";
+        when 37 => wchar <= "10000";
+        when 38 => wchar <= "10000";
+        when 39 => wchar <= "11011";
+        when 40 => wchar <= "01010";
+        when 41 => wchar <= "10001";
+        when 42 => wchar <= "01010";
+        when 43 => wchar <= "10110";
+        when 44 => wchar <= "10100";
+        when 45 => wchar <= "10100";
+        when 46 => wchar <= "10000";
+        when 47 => wchar <= "10000";
+        when 48 => wchar <= "00101";
+        when 49 => wchar <= "01110";
+        when 50 => wchar <= "10111";
+        when 51 => wchar <= "10000";
+        when 52 => wchar <= "11100";
+        when 53 => wchar <= "11101";
+        when 54 => wchar <= "11110";
+        when 55 => wchar <= "11111";
+        when 56 => wchar <= "10000";
+        when 57 => wchar <= "10000";
+        when 58 => wchar <= "10000";
+        when 59 => wchar <= "10000";
+        when 60 => wchar <= "10000";
+        when 61 => wchar <= "10000";
+        when 62 => wchar <= "10000";
         when others => wchar <= "10000";
     end case;
 end process word_rom_logic;
 
-glyph_select: process (attempts_left_num, pos, wchar) is
+
+slot <= wchar(2-1 downto 0);
+
+nibble_logic: process (seq_num, slot) is
 begin
-    if (pos >= 4) then
-        gidx <= wchar;
-    elsif (pos = 0) then
-        gidx <= (1 + resize(attempts_left_num, 5));
+    case slot is
+        when "00" =>
+            nibble <= seq_num(16-1 downto 12);
+        when "01" =>
+            nibble <= seq_num(12-1 downto 8);
+        when "10" =>
+            nibble <= seq_num(8-1 downto 4);
+        when others =>
+            nibble <= seq_num(4-1 downto 0);
+    end case;
+end process nibble_logic;
+
+glyph_select: process (attempts_left_num, count_num, nibble, slot, state_code_num, wchar) is
+begin
+    if (wchar = 27) then
+        gidx <= (0 + resize(attempts_left_num, 5));
+    elsif (wchar >= 28) then
+        if (count_num > slot) then
+            if (state_code_num = 6) then
+                gidx <= (0 + resize(nibble, 5));
+            else
+                gidx <= to_unsigned(25, 5);
+            end if;
+        else
+            gidx <= to_unsigned(26, 5);
+        end if;
     else
-        gidx <= to_unsigned(0, 5);
+        gidx <= wchar;
     end if;
 end process glyph_select;
 
 glyph_rom_logic: process (gidx) is
 begin
     case to_integer(gidx) is
-        when 0 => gpat <= "0000000";
-        when 1 => gpat <= "1111110";
-        when 2 => gpat <= "0110000";
-        when 3 => gpat <= "1101101";
-        when 4 => gpat <= "1111001";
-        when 5 => gpat <= "0000110";
-        when 6 => gpat <= "0111101";
-        when 7 => gpat <= "0001110";
-        when 8 => gpat <= "1001111";
-        when 9 => gpat <= "0010101";
-        when 10 => gpat <= "1100111";
-        when 11 => gpat <= "0001111";
+        when 0 => gpat <= "1111110";
+        when 1 => gpat <= "0110000";
+        when 2 => gpat <= "1101101";
+        when 3 => gpat <= "1111001";
+        when 4 => gpat <= "0110011";
+        when 5 => gpat <= "1011011";
+        when 6 => gpat <= "1011111";
+        when 7 => gpat <= "1110000";
+        when 8 => gpat <= "1111111";
+        when 9 => gpat <= "1111011";
+        when 10 => gpat <= "1110111";
+        when 11 => gpat <= "0011111";
         when 12 => gpat <= "1001110";
-        when 13 => gpat <= "0110111";
-        when 14 => gpat <= "0001101";
-        when 15 => gpat <= "1111110";
-        when 16 => gpat <= "1000111";
-        when 17 => gpat <= "0000101";
-        when 18 => gpat <= "1110111";
-        when 19 => gpat <= "0000000";
-        when 20 => gpat <= "0000000";
-        when 21 => gpat <= "0000000";
-        when 22 => gpat <= "0000000";
-        when 23 => gpat <= "0000000";
-        when 24 => gpat <= "0000000";
-        when 25 => gpat <= "0000000";
-        when 26 => gpat <= "0000000";
+        when 13 => gpat <= "0111101";
+        when 14 => gpat <= "1001111";
+        when 15 => gpat <= "1000111";
+        when 16 => gpat <= "0000000";
+        when 17 => gpat <= "0001110";
+        when 18 => gpat <= "1010111";
+        when 19 => gpat <= "0111110";
+        when 20 => gpat <= "0010101";
+        when 21 => gpat <= "0011101";
+        when 22 => gpat <= "0000101";
+        when 23 => gpat <= "0001111";
+        when 24 => gpat <= "0110111";
+        when 25 => gpat <= "0000001";
+        when 26 => gpat <= "0001000";
         when 27 => gpat <= "0000000";
         when 28 => gpat <= "0000000";
         when 29 => gpat <= "0000000";
@@ -177,7 +240,11 @@ end process an_decode;
 out_reg: process (clk) is
 begin
     if rising_edge(clk) then
-        seg_num <= gpat;
+        if ((state_code_num = 5) and (not bool(blink))) then
+            seg_num <= to_unsigned(0, 7);
+        else
+            seg_num <= gpat;
+        end if;
         an_num <= an_sel;
     end if;
 end process out_reg;

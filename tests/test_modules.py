@@ -11,9 +11,10 @@ from myhdl import (Signal, StopSimulation, always, block, delay, instance,
                    instances, intbv)
 
 from candado.datapath import code_comparator, code_register, digit_buffer
+from candado.alarm import alarm_outputs
 from candado.display import display_driver
-from candado.glyphs import (G_BLANK, GLYPH_DEFS, GLYPH_ROM, table_text,
-                            word_to_indices)
+from candado.glyphs import (G_DASH, G_UNDER, GLYPH_DEFS, GLYPH_INDEX, GLYPH_ROM,
+                            table_text)
 from candado.inputs import debouncer
 from candado.params import HW, SIM
 from candado.states import STATE_NAMES, STATE_RGB, STATE_WORDS
@@ -267,42 +268,67 @@ def test_comparador():
 
 
 # --------------------------------------------------------------------------
-def _expected_display(state, left):
-    word = STATE_WORDS[state].ljust(4, "_")
+def _expected_display(state, left, count, seq):
+    """Texto esperado, construido carácter a carácter desde STATE_WORDS."""
+    digits = [(seq >> (12 - 4 * k)) & 0xF for k in range(4)]
     pats = {}
-    for i, g in enumerate(word_to_indices(word)):
+    for i, ch in enumerate(STATE_WORDS[state]):
+        if ch == "#":
+            g = left
+        elif ch in "0123":
+            k = int(ch)
+            if k < count:
+                g = digits[k] if STATE_NAMES[state] == "CONFIG" else G_DASH
+            else:
+                g = G_UNDER
+        else:
+            g = GLYPH_INDEX[ch]
         pats[7 - i] = GLYPH_ROM[g]
-    pats[3] = pats[2] = pats[1] = GLYPH_ROM[G_BLANK]
-    pats[0] = GLYPH_ROM[1 + left]            # glifos 1..4 = dígitos 0..3
     return pats
 
 
-def test_display_driver_muestra_estado_e_intentos_restantes():
+def test_display_driver_muestra_texto_intentos_y_casillas():
     p = SIM
     frame = 8 << p.scan_bits
+    casos = []
+    for s in range(len(STATE_NAMES)):
+        for l in (0, 3, p.max_attempts):
+            casos.append((s, l, 0, 0))
+        for c in range(5):
+            casos.append((s, 2, c, 0xA5C3))
 
     @block
     def bench():
         clk = Signal(False)
         state = Signal(intbv(0)[3:])
-        left = Signal(intbv(0, min=0, max=4))
+        left = Signal(intbv(0, min=0, max=p.max_attempts + 1))
+        count = Signal(intbv(0, min=0, max=5))
+        seq = Signal(intbv(0)[16:])
+        blink = Signal(True)
         seg, an = Signal(intbv(0)[7:]), Signal(intbv(0)[8:])
-        dut = display_driver(clk, state, left, seg, an, p.scan_bits)
+        dut = display_driver(clk, state, left, count, seq, blink, seg, an,
+                             p.scan_bits)
         ck = _clock(clk)
 
         @instance
         def stim():
-            for s in range(len(STATE_NAMES)):
-                for l in range(4):
-                    state.next, left.next = s, l
-                    shown = {}
-                    for _ in range(3 * frame):
-                        yield clk.posedge
-                        yield delay(1)
-                        one_hot = int(an)
-                        if bin(one_hot).count("1") == 1 and _ > 4:
-                            shown[one_hot.bit_length() - 1] = int(seg)
-                    assert shown == _expected_display(s, l), (STATE_NAMES[s], l)
+            for s, l, c, q in casos:
+                state.next, left.next, count.next, seq.next = s, l, c, q
+                shown = {}
+                for n in range(3 * frame):
+                    yield clk.posedge
+                    yield delay(1)
+                    one_hot = int(an)
+                    if bin(one_hot).count("1") == 1 and n > 4:
+                        shown[one_hot.bit_length() - 1] = int(seg)
+                assert shown == _expected_display(s, l, c, q), (STATE_NAMES[s], l, c)
+            # En ALARM con blink = 0 el display queda apagado.
+            state.next, blink.next = STATE_NAMES.index("ALARM"), False
+            for n in range(2 * frame):
+                yield clk.posedge
+                yield delay(1)
+                if n > 4:
+                    assert int(seg) == 0
             raise StopSimulation()
 
         return instances()
@@ -310,7 +336,7 @@ def test_display_driver_muestra_estado_e_intentos_restantes():
     _run(bench)
 
 
-def test_status_leds_termometro_banderas_y_rgb():
+def test_status_leds_termometro_intentos_banderas_y_rgb():
     p = SIM
 
     @block
@@ -318,8 +344,10 @@ def test_status_leds_termometro_banderas_y_rgb():
         clk = Signal(False)
         state = Signal(intbv(0)[3:])
         count = Signal(intbv(0, min=0, max=5))
+        left = Signal(intbv(0, min=0, max=p.max_attempts + 1))
+        blink = Signal(True)
         led, rgb = Signal(intbv(0)[16:]), Signal(intbv(0)[3:])
-        dut = status_outputs(clk, state, count, led, rgb, p.pwm_bits)
+        dut = status_outputs(clk, state, count, left, blink, led, rgb, p.pwm_bits)
         ck = _clock(clk)
 
         @instance
@@ -327,23 +355,85 @@ def test_status_leds_termometro_banderas_y_rgb():
             colores = set()
             for s in range(len(STATE_NAMES)):
                 for c in range(5):
-                    state.next, count.next = s, c
-                    seen_rgb = set()
-                    for _ in range(2 << p.pwm_bits):
-                        yield clk.posedge
-                        yield delay(1)
-                        seen_rgb.add(int(rgb))
-                    therm = (1 << c) - 1
-                    flags = {5: 1 << 15, 4: 1 << 14, 3: 1 << 13, 6: 1 << 12}.get(s, 0)
-                    assert int(led) == flags | therm, (STATE_NAMES[s], c)
-                    assert seen_rgb == {0, STATE_RGB[s]}      # PWM: apagado o color
+                    for l in range(p.max_attempts + 1):
+                        state.next, count.next, left.next = s, c, l
+                        seen_rgb = set()
+                        for _ in range(2 << p.pwm_bits):
+                            yield clk.posedge
+                            yield delay(1)
+                            seen_rgb.add(int(rgb))
+                        name = STATE_NAMES[s]
+                        if name == "ALARM":
+                            expected = 0xFFFF               # blink = 1: todos encendidos
+                        else:
+                            flags = {"ERROR": 1 << 14, "UNLOCKED": 1 << 13,
+                                     "CONFIG": 1 << 12}.get(name, 0)
+                            if name not in ("UNLOCKED", "CONFIG"):
+                                flags |= 1 << 11            # candado cerrado
+                            expected = flags | (((1 << l) - 1) << 4) | ((1 << c) - 1)
+                        assert int(led) == expected, (name, c, l)
+                        assert seen_rgb == {0, STATE_RGB[s]}      # PWM: apagado o color
                 colores.add(STATE_RGB[s])
             assert len(colores) == len(STATE_NAMES)           # un color por estado
+            # ALARM con blink = 0: LEDs y RGB apagados
+            state.next, blink.next = STATE_NAMES.index("ALARM"), False
+            for _ in range(2 << p.pwm_bits):
+                yield clk.posedge
+                yield delay(1)
+                assert int(led) == 0 and int(rgb) == 0
             raise StopSimulation()
 
         return instances()
 
     _run(bench)
+
+
+def test_alarm_outputs_sirena_y_parpadeo():
+    p = SIM
+    log = {"blink": [], "tone": [], "sd": []}
+
+    @block
+    def bench():
+        clk = Signal(False)
+        state = Signal(intbv(0)[3:])
+        blink, tone, sd = Signal(False), Signal(False), Signal(False)
+        dut = alarm_outputs(clk, state, blink, tone, sd, p.blink_bits,
+                            p.tone_hi_cycles, p.tone_lo_cycles)
+        ck = _clock(clk)
+
+        @instance
+        def stim():
+            for s in range(len(STATE_NAMES)):
+                state.next = s
+                for _ in range(2 << p.blink_bits):
+                    yield clk.posedge
+                    yield delay(1)
+                    log["blink"].append(int(blink))
+                    log["tone"].append((STATE_NAMES[s], int(blink), int(tone)))
+                    log["sd"].append((STATE_NAMES[s], int(sd)))
+            raise StopSimulation()
+
+        return instances()
+
+    _run(bench)
+    # parpadeo: onda cuadrada de periodo 2^BLINK_BITS
+    b = log["blink"]
+    flancos = [k for k in range(1, len(b)) if b[k] != b[k - 1]]
+    assert {y - x for x, y in zip(flancos, flancos[1:])} == {1 << (p.blink_bits - 1)}
+    # sirena y amplificador sólo en ALARM
+    assert all(v == (n == "ALARM") for n, v in log["sd"])
+    assert all(v == 0 for n, _, v in log["tone"] if n != "ALARM")
+    # dos tonos: medio periodo TONE_HI con blink = 1 y TONE_LO con blink = 0
+    for fase, half in ((1, p.tone_hi_cycles), (0, p.tone_lo_cycles)):
+        w = [v for n, bl, v in log["tone"] if n == "ALARM" and bl == fase]
+        runs, n = [], 1
+        for x, y in zip(w, w[1:]):
+            if x == y:
+                n += 1
+            else:
+                runs.append(n)
+                n = 1
+        assert half in runs and max(runs[1:]) == half, (fase, runs)
 
 
 # --------------------------------------------------------------------------
@@ -397,7 +487,7 @@ def test_event_logger_texto_y_ranura_pendiente():
     def bench():
         clk, rst = Signal(False), Signal(False)
         state = Signal(intbv(0)[3:])
-        fail = Signal(intbv(0, min=0, max=4))
+        fail = Signal(intbv(0, min=0, max=6))
         txd = Signal(True)
         dut = event_logger(clk, rst, state, fail, txd, B)
         ck = _clock(clk)
@@ -419,9 +509,9 @@ def test_event_logger_texto_y_ranura_pendiente():
             yield from goto(1, 0, 1100)           # INPUT: se envía completo
             yield from goto(2, 0, 1)              # VALIDATE: no se registra
             yield from goto(4, 1, 1100)           # ERROR con 1 fallo
-            yield from goto(5, 3, 100)            # ALARM: empieza a enviarse ...
+            yield from goto(5, 5, 100)            # ALARM: empieza a enviarse ...
             yield from goto(1, 0, 50)             # ... INPUT llega durante el envío ...
-            yield from goto(0, 0, 1900)           # ... e IDLE lo reemplaza (ranura única)
+            yield from goto(0, 0, 1900)           # ... y LOCKED lo reemplaza (ranura única)
             raise StopSimulation()
 
         return instances()
@@ -430,8 +520,8 @@ def test_event_logger_texto_y_ranura_pendiente():
     text = decode_uart(samples, B).decode()
     assert text == ("INPUT    0\r\n"
                     "ERROR    1\r\n"
-                    "ALARM    3\r\n"
-                    "IDLE     0\r\n")     # INPUT se descartó: sólo se guarda el último
+                    "ALARM    5\r\n"
+                    "LOCKED   0\r\n")     # INPUT se descartó: sólo se guarda el último
 
 
 # --------------------------------------------------------------------------
@@ -443,10 +533,18 @@ def test_tabla_de_glifos_coincide_con_el_archivo_del_repositorio():
 
 
 def test_digitos_de_la_tabla_son_los_estandar():
-    # 0..3 en abcdefg
-    patrones = {k: p for k, p, _ in GLYPH_DEFS}
-    assert patrones["0"] == "1111110" and patrones["1"] == "0110000"
-    assert patrones["2"] == "1101101" and patrones["3"] == "1111001"
+    # 0..F en abcdefg, consecutivos desde el índice 0
+    estandar = ("1111110", "0110000", "1101101", "1111001", "0110011", "1011011",
+                "1011111", "1110000", "1111111", "1111011", "1110111", "0011111",
+                "1001110", "0111101", "1001111", "1000111")
+    assert tuple(p for _, p, _ in GLYPH_DEFS[:16]) == estandar
+    assert len({p for _, p, _ in GLYPH_DEFS}) == len(GLYPH_DEFS)   # sin glifos repetidos
+
+
+def test_todos_los_textos_de_estado_tienen_8_caracteres_representables():
+    for name, word in zip(STATE_NAMES, STATE_WORDS):
+        assert len(word) == 8, name
+        assert set(word) <= set(GLYPH_INDEX) | set("#0123"), name
 
 
 def test_parametros_de_hardware_equivalen_a_tiempos_reales():
@@ -456,6 +554,10 @@ def test_parametros_de_hardware_equivalen_a_tiempos_reales():
     assert HW.error_ticks * HW.tick_cycles / f == 1.0
     assert HW.unlocked_ticks * HW.tick_cycles / f == 10.0
     assert HW.alarm_ticks * HW.tick_cycles / f == 30.0
+    assert HW.max_attempts == 5
+    assert abs(f / (2 * HW.tone_hi_cycles) - 1000) < 1      # sirena: 1 kHz ...
+    assert abs(f / (2 * HW.tone_lo_cycles) - 660) < 1       # ... y 660 Hz
+    assert 1 <= f / (1 << HW.blink_bits) <= 5               # parpadeo visible (Hz)
     assert abs(f / HW.baud_cycles - 115200) / 115200 < 0.01
     assert 0.010 <= HW.debounce_cycles / f <= 0.020      # rango del anteproyecto (10-20 ms)
     refresco = f / (8 << HW.scan_bits)

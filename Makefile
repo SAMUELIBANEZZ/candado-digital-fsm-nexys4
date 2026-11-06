@@ -12,7 +12,7 @@
 #   make clean
 
 PY ?= python3
-SCEN ?= tc04_tres_incorrectas_consecutivas
+SCEN ?= tc04_cinco_incorrectas_consecutivas
 
 .PHONY: all test hdl xdc vectors ghdl vcd pyvcd mutation clean
 
