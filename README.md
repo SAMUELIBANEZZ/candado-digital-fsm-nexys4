@@ -178,4 +178,7 @@ docs/             informe APA 7 y figuras (docs/img, generadas con tools/generat
 
 Maqueta de control lógico, no dispositivo de seguridad: el código no está cifrado, se pierde al reprogramar
 y el dígito en curso es visible en los switches. El registro UART es una extensión (el anteproyecto
-excluía la comunicación con computador). Para una Nexys4 original (no DDR) los pines son otros.
+excluía la comunicación con computador).
+
+**Placa:** el diseño es para la **Nexys4 DDR** (y la Nexys A7-100T, que tiene los mismos pines). No sirve sin
+cambios en la Nexys4 original (modelo anterior, sin "DDR"), porque sus botones, display y audio usan otros pines.
